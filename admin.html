@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Admin Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+  body {
+    background: #050505;
+    color: #00fff0;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+  }
+
+  h1 {
+    color: #ff00ff;
+    text-shadow: 0 0 15px #ff00ff;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    box-shadow: 0 0 20px #00fff0;
+  }
+
+  th, td {
+    padding: 12px;
+    border: 1px solid #00fff0;
+    text-align: left;
+  }
+
+  th {
+    background: #0f0f0f;
+  }
+
+  tr:hover {
+    background: rgba(0,255,240,0.1);
+  }
+
+  button {
+    padding: 10px 20px;
+    background: #00fff0;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+</style>
+</head>
+
+<body>
+
+<h1>Admin Dashboard</h1>
+<button onclick="logout()">Logout</button>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Phone</th>
+      <th>Registered At</th>
+    </tr>
+  </thead>
+  <tbody id="usersTable"></tbody>
+</table>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA5lFZWR8KaPhYyGPEGD3VI3Ziz5ANpau4",
+  authDomain: "private-stream-4e400.firebaseapp.com",
+  projectId: "private-stream-4e400",
+  storageBucket: "private-stream-4e400.appspot.com",
+  messagingSenderId: "333562639763",
+  appId: "1:333562639763:web:08e551d7c52e5cebff2466"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const ADMIN_PHONE = "+2547XXXXXXXX"; // 🔴 REPLACE with YOUR phone
+
+const table = document.getElementById("usersTable");
+
+onAuthStateChanged(auth, user => {
+  if (!user || user.phoneNumber !== ADMIN_PHONE) {
+    alert("Unauthorized");
+    window.location.href = "index.html";
+  }
+});
+
+/* Live user list */
+onSnapshot(collection(db, "users"), snapshot => {
+  table.innerHTML = "";
+  snapshot.forEach(doc => {
+    const d = doc.data();
+    table.innerHTML += `
+      <tr>
+        <td>${d.name || "N/A"}</td>
+        <td>${d.phone}</td>
+        <td>${d.createdAt || "—"}</td>
+      </tr>
+    `;
+  });
+});
+
+function logout(){
+  signOut(auth).then(() => location.href="index.html");
+}
+</script>
+
+</body>
+</html>
