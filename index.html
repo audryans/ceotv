@@ -4,10 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Private Stream Access</title>
-<script src="firebase.js"></script>
 <style>
   body {
-    background: #0f0f0f;
+    background: #0a0a0a;
     color: #00fff0;
     font-family: 'Arial', sans-serif;
     display: flex;
@@ -16,64 +15,106 @@
     justify-content: center;
     height: 100vh;
   }
-  h1 { color: #ff00ff; }
+  h1 {
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff;
+  }
   input, button {
     margin: 10px;
-    padding: 10px;
+    padding: 12px;
     border: 2px solid #00fff0;
     border-radius: 8px;
     background: transparent;
     color: #00fff0;
     font-size: 16px;
+    outline: none;
   }
-  button { cursor: pointer; transition: 0.3s; }
-  button:hover { background: #00fff0; color: #000; }
+  input::placeholder { color: #00fff0; opacity: 0.7; }
+  button {
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  button:hover {
+    background: #00fff0;
+    color: #000;
+    box-shadow: 0 0 15px #00fff0;
+  }
+  #otp { display: none; }
 </style>
 </head>
 <body>
 
 <h1>Access Private Stream</h1>
 
-<input id="name" placeholder="Full Name" required>
-<input id="phone" placeholder="+2547XXXXXXXX" required>
+<input id="name" placeholder="Full Name">
+<input id="phone" placeholder="+2547XXXXXXXX">
 <div id="recaptcha-container"></div>
-<button onclick="sendOTP()">Send OTP</button>
+<button id="sendBtn">Send OTP</button>
 
 <input id="otp" placeholder="Enter OTP">
-<button onclick="verifyOTP()">Verify & Enter Stream</button>
+<button id="verifyBtn">Verify & Enter Stream</button>
 
-<script>
-window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-  'size': 'invisible'
-});
+<script type="module">
+// --- Firebase SDK imports ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-function sendOTP(){
-  const phone = document.getElementById("phone").value;
-  const name = document.getElementById("name").value;
-  if(!phone || !name){ alert("Enter name & phone"); return; }
+// --- Your Firebase Config ---
+const firebaseConfig = {
+  apiKey: "AIzaSyA5lFZWR8KaPhYyGPEGD3VI3Ziz5ANpau4",
+  authDomain: "private-stream-4e400.firebaseapp.com",
+  projectId: "private-stream-4e400",
+  storageBucket: "private-stream-4e400.appspot.com",
+  messagingSenderId: "333562639763",
+  appId: "1:333562639763:web:08e551d7c52e5cebff2466"
+};
 
-  // Save user temporarily in Firestore (optional)
-  db.collection("users").doc(phone).set({name: name, phone: phone})
-    .catch(err => console.log(err));
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
-    .then(confirmationResult => {
-      window.confirmationResult = confirmationResult;
+// Initialize invisible reCAPTCHA
+window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', { size: 'invisible' }, auth);
+
+let confirmationResult = null;
+
+// --- DOM Elements ---
+const sendBtn = document.getElementById("sendBtn");
+const verifyBtn = document.getElementById("verifyBtn");
+const otpInput = document.getElementById("otp");
+
+// --- Send OTP ---
+sendBtn.addEventListener("click", async () => {
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  if (!name || !phone) { alert("Enter name and phone"); return; }
+
+  // Save user in Firestore
+  try { await setDoc(doc(db, "users", phone), { name, phone }); } 
+  catch(e){ console.log("Firestore error:", e); }
+
+  // Send OTP
+  signInWithPhoneNumber(auth, phone, window.recaptchaVerifier)
+    .then(result => {
+      confirmationResult = result;
       alert("OTP sent to " + phone);
+      otpInput.style.display = "block"; // show OTP input
     })
     .catch(err => alert(err.message));
-}
+});
 
-function verifyOTP(){
-  const code = document.getElementById("otp").value;
-  window.confirmationResult.confirm(code)
-    .then(result => {
-      window.location.href = "stream.html";
-    })
-    .catch(err => alert("Invalid OTP"));
-}
+// --- Verify OTP ---
+verifyBtn.addEventListener("click", () => {
+  const code = otpInput.value.trim();
+  if(!code || !confirmationResult){ alert("Enter OTP"); return; }
+
+  confirmationResult.confirm(code)
+    .then(() => { window.location.href = "stream.html"; })
+    .catch(() => alert("Invalid OTP"));
+});
 </script>
 
 </body>
 </html>
-
