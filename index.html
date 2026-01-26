@@ -1,1 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Private Stream Access</title>
+<script src="firebase.js"></script>
+<style>
+  body {
+    background: #0f0f0f;
+    color: #00fff0;
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+  h1 { color: #ff00ff; }
+  input, button {
+    margin: 10px;
+    padding: 10px;
+    border: 2px solid #00fff0;
+    border-radius: 8px;
+    background: transparent;
+    color: #00fff0;
+    font-size: 16px;
+  }
+  button { cursor: pointer; transition: 0.3s; }
+  button:hover { background: #00fff0; color: #000; }
+</style>
+</head>
+<body>
+
+<h1>Access Private Stream</h1>
+
+<input id="name" placeholder="Full Name" required>
+<input id="phone" placeholder="+2547XXXXXXXX" required>
+<div id="recaptcha-container"></div>
+<button onclick="sendOTP()">Send OTP</button>
+
+<input id="otp" placeholder="Enter OTP">
+<button onclick="verifyOTP()">Verify & Enter Stream</button>
+
+<script>
+window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+  'size': 'invisible'
+});
+
+function sendOTP(){
+  const phone = document.getElementById("phone").value;
+  const name = document.getElementById("name").value;
+  if(!phone || !name){ alert("Enter name & phone"); return; }
+
+  // Save user temporarily in Firestore (optional)
+  db.collection("users").doc(phone).set({name: name, phone: phone})
+    .catch(err => console.log(err));
+
+  auth.signInWithPhoneNumber(phone, window.recaptchaVerifier)
+    .then(confirmationResult => {
+      window.confirmationResult = confirmationResult;
+      alert("OTP sent to " + phone);
+    })
+    .catch(err => alert(err.message));
+}
+
+function verifyOTP(){
+  const code = document.getElementById("otp").value;
+  window.confirmationResult.confirm(code)
+    .then(result => {
+      window.location.href = "stream.html";
+    })
+    .catch(err => alert("Invalid OTP"));
+}
+</script>
+
+</body>
+</html>
 
