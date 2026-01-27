@@ -2,31 +2,101 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Live Stream</title>
+<title>Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 html, body {
   margin: 0;
   padding: 0;
+  height: 100%;
   background: radial-gradient(circle at top, #020202, #000);
   font-family: Arial, sans-serif;
-  height: 100%;
   color: #00ffe7;
 }
 
-.header {
-  text-align: center;
-  padding: 15px;
-  font-size: 22px;
-  color: #ff00ff;
-  text-shadow: 0 0 15px #ff00ff;
-}
-
-.stream-wrap {
+/* LOCK SCREEN */
+#lockScreen {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.96);
   display: flex;
   justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.lock-card {
+  padding: 32px;
+  border-radius: 16px;
+  border: 2px solid #00ffe7;
+  box-shadow: 0 0 30px #00ffe7, 0 0 60px #ff00ff;
+  text-align: center;
+  max-width: 380px;
+  width: 92%;
+}
+
+.lock-card h2 {
+  color: #ff00ff;
+  text-shadow: 0 0 15px #ff00ff;
+  margin-bottom: 10px;
+}
+
+.lock-card p {
+  font-size: 14px;
+  opacity: 0.85;
+  margin-bottom: 10px;
+}
+
+.lock-card a {
+  color: #25D366;
+  font-weight: bold;
+  text-decoration: none;
+  text-shadow: 0 0 10px #25D366;
+}
+
+.lock-card a:hover {
+  text-decoration: underline;
+}
+
+#adminHint {
+  display: none;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #ffcc00;
+  text-shadow: 0 0 8px #ffcc00;
+}
+
+.lock-card input {
+  width: 100%;
+  padding: 12px;
+  margin-top: 14px;
+  border-radius: 8px;
+  background: transparent;
+  border: 2px solid #00ffe7;
+  color: #00ffe7;
+  font-size: 16px;
+  text-align: center;
+}
+
+.lock-card button {
+  margin-top: 16px;
+  padding: 12px;
+  width: 100%;
+  border-radius: 8px;
+  border: none;
+  background: #00ffe7;
+  color: #000;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 0 20px #00ffe7;
+}
+
+/* STREAM */
+.stream-wrap {
+  display: none;
   padding: 10px;
+  justify-content: center;
 }
 
 .stream-frame {
@@ -35,9 +105,7 @@ html, body {
   border-radius: 16px;
   overflow: hidden;
   border: 2px solid #00ffe7;
-  box-shadow:
-    0 0 20px #00ffe7,
-    0 0 50px #ff00ff;
+  box-shadow: 0 0 20px #00ffe7, 0 0 50px #ff00ff;
 }
 
 iframe {
@@ -45,20 +113,37 @@ iframe {
   height: 650px;
   border: none;
 }
-
-.footer {
-  text-align: center;
-  font-size: 12px;
-  opacity: 0.6;
-  padding: 10px;
-}
 </style>
 </head>
 
 <body>
-<div class="header">🔴 LIVE STREAM</div>
 
-<div class="stream-wrap">
+<!-- LOCK SCREEN -->
+<div id="lockScreen">
+  <div class="lock-card">
+    <h2>Enter Stream Password</h2>
+
+    <p>
+      You skipped filling viewer data.<br>
+      Contact admin for password:
+      <br>
+      <a href="https://wa.me/254725820123" target="_blank">
+        💬 Chat on WhatsApp
+      </a>
+    </p>
+
+    <!-- ADMIN-ONLY HINT -->
+    <div id="adminHint">
+      🔑 Hint: <strong>SPORT + year</strong>
+    </div>
+
+    <input type="password" id="passwordInput" placeholder="Access Password">
+    <button onclick="unlock()">UNLOCK STREAM</button>
+  </div>
+</div>
+
+<!-- STREAM -->
+<div class="stream-wrap" id="streamWrap">
   <div class="stream-frame">
     <iframe
       src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io"
@@ -67,8 +152,25 @@ iframe {
   </div>
 </div>
 
-<div class="footer">
-  © Secure Private Stream
-</div>
+<script>
+const STREAM_PASSWORD = "SPORTPESA2026"; // 🔐 real password
+
+/* ADMIN CHECK */
+const params = new URLSearchParams(window.location.search);
+if (params.get("admin") === "1" || localStorage.getItem("isAdmin") === "true") {
+  document.getElementById("adminHint").style.display = "block";
+}
+
+function unlock() {
+  const input = document.getElementById("passwordInput").value;
+  if (input === STREAM_PASSWORD) {
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("streamWrap").style.display = "flex";
+  } else {
+    alert("Incorrect password");
+  }
+}
+</script>
+
 </body>
 </html>
