@@ -2,117 +2,128 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Secure Stream Access</title>
+<title>Stream Access</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
-html, body {
+body {
   margin: 0;
-  padding: 0;
-  height: 100%;
-  background: radial-gradient(circle at top, #050505, #000);
-  font-family: 'Segoe UI', Arial, sans-serif;
-  color: #00ffe7;
-}
-
-.wrapper {
-  min-height: 100vh;
+  height: 100vh;
+  background: radial-gradient(circle at top, #020202, #000);
   display: flex;
   justify-content: center;
   align-items: center;
+  font-family: Arial, sans-serif;
+  color: #00ffe7;
 }
 
-.card {
+.box {
   width: 92%;
   max-width: 420px;
-  padding: 30px;
+  padding: 28px;
+  text-align: center;
   border-radius: 18px;
   background: rgba(0,0,0,0.9);
   border: 2px solid #00ffe7;
-  box-shadow:
-    0 0 25px #00ffe7,
-    0 0 55px #ff00ff;
-  text-align: center;
-  animation: glow 3s infinite alternate;
+  box-shadow: 0 0 30px #00ffe7, 0 0 60px #ff00ff;
 }
 
-h1 {
+h2 {
   color: #ff00ff;
-  text-shadow: 0 0 20px #ff00ff;
-  margin-bottom: 12px;
+  text-shadow: 0 0 15px #ff00ff;
 }
 
-.tag {
-  font-size: 14px;
-  margin-bottom: 15px;
-  color: #00ffe7;
-  opacity: 0.9;
+input {
+  width: 100%;
+  padding: 14px;
+  margin-top: 15px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  font-size: 16px;
+}
+
+button {
+  width: 100%;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  background: #00ffe7;
+  color: #000;
+  font-weight: bold;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.note {
+  margin-top: 16px;
+  font-size: 13px;
+  opacity: 0.85;
 }
 
 .free {
   color: #25D366;
   font-weight: bold;
-  text-shadow: 0 0 10px #25D366;
-}
-
-.info {
-  font-size: 14px;
-  opacity: 0.85;
-  margin-bottom: 20px;
 }
 
 .whatsapp-btn {
   display: block;
+  margin-top: 18px;
   padding: 16px;
-  border-radius: 14px;
   background: #25D366;
   color: #000;
-  font-size: 18px;
+  border-radius: 14px;
   font-weight: bold;
+  font-size: 18px;
   text-decoration: none;
-  box-shadow:
-    0 0 20px #25D366,
-    0 0 40px #25D366;
-  transition: 0.3s ease;
+  box-shadow: 0 0 25px #25D366, 0 0 45px #25D366;
 }
 
 .whatsapp-btn:hover {
   transform: scale(1.05);
-  box-shadow:
-    0 0 35px #25D366,
-    0 0 65px #25D366;
-}
-
-@keyframes glow {
-  from {
-    box-shadow: 0 0 20px #00ffe7;
-  }
-  to {
-    box-shadow: 0 0 45px #00ffe7, 0 0 70px #ff00ff;
-  }
 }
 </style>
 </head>
 
 <body>
-<div class="wrapper">
-  <div class="card">
-    <h1>Private Live Stream</h1>
 
-    <div class="tag">
-      🔐 Stream password is <span class="free">FREE</span>
-    </div>
+<div class="box">
+  <h2>Enter Stream Password</h2>
 
-    <div class="info">
-      For security purposes, please request the access password directly from admin.
-    </div>
+  <!-- PASSWORD ENTRY -->
+  <input type="password" id="password" placeholder="Enter password">
+  <button onclick="checkPassword()">Access Stream</button>
 
-    <a class="whatsapp-btn"
-       href="https://wa.me/254725820123?text=Hello%2C%20I%20would%20like%20to%20request%20the%20stream%20password."
-       target="_blank">
-      💬 REQUEST PASSWORD ON WHATSAPP
-    </a>
+  <!-- INFO -->
+  <div class="note">
+    🔐 Password is <span class="free">FREE</span> — required only for security purposes.
   </div>
+
+  <div class="note">
+    You skipped filling data? Contact admin to request the password.
+  </div>
+
+  <!-- WHATSAPP BUTTON -->
+  <a class="whatsapp-btn"
+     href="https://wa.me/254725820123?text=Hello%2C%20please%20share%20the%20stream%20password."
+     target="_blank">
+     💬 REQUEST PASSWORD ON WHATSAPP
+  </a>
 </div>
+
+<script>
+function checkPassword() {
+  const entered = document.getElementById("password").value;
+  const correctPassword = "YOUR_PASSWORD_HERE";
+
+  if (entered === correctPassword) {
+    window.location.href = "watch.html";
+  } else {
+    alert("Incorrect password");
+  }
+}
+</script>
+
 </body>
 </html>
