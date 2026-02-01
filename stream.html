@@ -5,6 +5,66 @@
 <title>Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- Firebase SDK -->
+<script type="module">
+  // Import Firebase
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
+    authDomain: "twitch-user-access.firebaseapp.com",
+    projectId: "twitch-user-access",
+    storageBucket: "twitch-user-access.firebasestorage.app",
+    messagingSenderId: "370819036531",
+    appId: "1:370819036531:web:b6a2590eaec92e9394c106"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Two-step access functions
+  const STREAM_PASSWORD = "1234"; // Change this to your real password
+
+  window.submitViewerData = async function() {
+    const fullName = document.getElementById("fullName").value.trim();
+    const phone = document.getElementById("phone").value.trim();
+
+    if (!fullName || !phone) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    try {
+      // Save to Firestore
+      await addDoc(collection(db, "viewers"), {
+        full_name: fullName,
+        phone: phone,
+        timestamp: serverTimestamp()
+      });
+
+      // Hide registration form & show password form
+      document.getElementById("registrationCard").style.display = "none";
+      document.getElementById("passwordCard").style.display = "block";
+
+    } catch (err) {
+      alert("Error saving details: " + err);
+    }
+  };
+
+  window.unlockStream = function() {
+    const input = document.getElementById("passwordInput").value;
+    if (input === STREAM_PASSWORD) {
+      document.getElementById("lockScreen").style.display = "none";
+      document.getElementById("streamWrap").style.display = "flex";
+    } else {
+      alert("Incorrect password");
+    }
+  };
+</script>
+
 <style>
 html, body {
   margin: 0;
@@ -42,31 +102,6 @@ html, body {
   margin-bottom: 10px;
 }
 
-.lock-card p {
-  font-size: 14px;
-  opacity: 0.85;
-  margin-bottom: 10px;
-}
-
-.lock-card a {
-  color: #25D366;
-  font-weight: bold;
-  text-decoration: none;
-  text-shadow: 0 0 10px #25D366;
-}
-
-.lock-card a:hover {
-  text-decoration: underline;
-}
-
-#adminHint {
-  display: none;
-  margin-top: 8px;
-  font-size: 13px;
-  color: #ffcc00;
-  text-shadow: 0 0 8px #ffcc00;
-}
-
 .lock-card input {
   width: 100%;
   padding: 12px;
@@ -92,7 +127,23 @@ html, body {
   box-shadow: 0 0 20px #00ffe7;
 }
 
-/* STREAM */
+.lock-card p {
+  font-size: 14px;
+  opacity: 0.85;
+  margin-top: 12px;
+}
+
+.lock-card a {
+  color: #25D366;
+  font-weight: bold;
+  text-decoration: none;
+  text-shadow: 0 0 10px #25D366;
+}
+
+.lock-card a:hover {
+  text-decoration: underline;
+}
+
 .stream-wrap {
   display: none;
   padding: 10px;
@@ -118,27 +169,23 @@ iframe {
 
 <body>
 
-<!-- LOCK SCREEN -->
+<!-- LOCK SCREEN WITH REGISTRATION + PASSWORD -->
 <div id="lockScreen">
-  <div class="lock-card">
+  <!-- Step 1: Registration -->
+  <div class="lock-card" id="registrationCard">
+    <h2>Enter Your Details</h2>
+    <input type="text" id="fullName" placeholder="Full Name" required>
+    <input type="tel" id="phone" placeholder="Phone Number" required>
+    <button onclick="submitViewerData()">Next</button>
+    <p>Need help? <a href="https://wa.me/254725820123" target="_blank">💬 Chat on WhatsApp</a></p>
+  </div>
+
+  <!-- Step 2: Password -->
+  <div class="lock-card" id="passwordCard" style="display:none;">
     <h2>Enter Stream Password</h2>
-
-    <p>
-      You skipped filling viewer data.<br>
-      Contact admin for password:
-      <br>
-      <a href="https://wa.me/254725820123" target="_blank">
-        💬 Chat on WhatsApp
-      </a>
-    </p>
-
-    <!-- ADMIN-ONLY HINT -->
-    <div id="adminHint">
-      🔑 Hint: <strong>SPORT + year</strong>
-    </div>
-
     <input type="password" id="passwordInput" placeholder="Access Password">
-    <button onclick="unlock()">UNLOCK STREAM</button>
+    <button onclick="unlockStream()">Unlock Stream</button>
+    <p>Need help? <a href="https://wa.me/254725820123" target="_blank">💬 Chat on WhatsApp</a></p>
   </div>
 </div>
 
@@ -151,26 +198,6 @@ iframe {
     </iframe>
   </div>
 </div>
-
-<script>
-const STREAM_PASSWORD = "1234"; // 🔐 real password
-
-/* ADMIN CHECK */
-const params = new URLSearchParams(window.location.search);
-if (params.get("admin") === "1" || localStorage.getItem("isAdmin") === "true") {
-  document.getElementById("adminHint").style.display = "block";
-}
-
-function unlock() {
-  const input = document.getElementById("passwordInput").value;
-  if (input === STREAM_PASSWORD) {
-    document.getElementById("lockScreen").style.display = "none";
-    document.getElementById("streamWrap").style.display = "flex";
-  } else {
-    alert("Incorrect password");
-  }
-}
-</script>
 
 </body>
 </html>
