@@ -5,64 +5,117 @@
 <title>Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Firebase SDK -->
 <script type="module">
-  // Import Firebase
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-  // Firebase config
-  const firebaseConfig = {
-    apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
-    authDomain: "twitch-user-access.firebaseapp.com",
-    projectId: "twitch-user-access",
-    storageBucket: "twitch-user-access.firebasestorage.app",
-    messagingSenderId: "370819036531",
-    appId: "1:370819036531:web:b6a2590eaec92e9394c106"
-  };
+/* 🔥 FIREBASE CONFIG (UNCHANGED) */
+const firebaseConfig = {
+  apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
+  authDomain: "twitch-user-access.firebaseapp.com",
+  projectId: "twitch-user-access",
+  storageBucket: "twitch-user-access.firebasestorage.app",
+  messagingSenderId: "370819036531",
+  appId: "1:370819036531:web:b6a2590eaec92e9394c106"
+};
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-  // Two-step access functions
-  const STREAM_PASSWORD = "2025"; // Change this to your real password
+/* 🔐 PASSWORD GENERATOR */
+function generatePassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let p = "SPT-";
+  for (let i = 0; i < 4; i++) {
+    p += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return p;
+}
 
-  window.submitViewerData = async function() {
-    const fullName = document.getElementById("fullName").value.trim();
-    const phone = document.getElementById("phone").value.trim();
+/* ⏱ EXPIRY (2 HOURS) */
+function getExpiryTime() {
+  const d = new Date();
+  d.setHours(d.getHours() + 2);
+  return d;
+}
 
-    if (!fullName || !phone) {
-      alert("Please fill all fields");
-      return;
-    }
+/* 📲 SEND TO ADMIN WHATSAPP */
+function notifyAdmin(name, phone, password, expiresAt) {
+  const admin = "254725820123"; // YOUR NUMBER
+  const msg = `
+NEW STREAM REGISTRATION
 
-    try {
-      // Save to Firestore
-      await addDoc(collection(db, "viewers"), {
-        full_name: fullName,
-        phone: phone,
-        timestamp: serverTimestamp()
-      });
+Name: ${name}
+Phone: ${phone}
+Password: ${password}
+Expires: ${expiresAt.toLocaleString()}
 
-      // Hide registration form & show password form
-      document.getElementById("registrationCard").style.display = "none";
-      document.getElementById("passwordCard").style.display = "block";
+Status: Pending payment
+`;
+  window.open(
+    `https://wa.me/${admin}?text=${encodeURIComponent(msg)}`,
+    "_blank"
+  );
+}
 
-    } catch (err) {
-      alert("Error saving details: " + err);
-    }
-  };
+/* 📝 REGISTRATION */
+window.submitViewerData = async function () {
+  const fullName = document.getElementById("fullName").value.trim();
+  const phone = document.getElementById("phone").value.trim();
 
-  window.unlockStream = function() {
-    const input = document.getElementById("passwordInput").value;
-    if (input === STREAM_PASSWORD) {
-      document.getElementById("lockScreen").style.display = "none";
-      document.getElementById("streamWrap").style.display = "flex";
-    } else {
-      alert("Incorrect password");
-    }
-  };
+  if (!fullName || !phone) {
+    alert("Please fill all fields");
+    return;
+  }
+
+  const password = generatePassword();
+  const expiresAt = getExpiryTime();
+
+  await addDoc(collection(db, "viewers"), {
+    full_name: fullName,
+    phone: phone,
+    password: password,
+    expires_at: expiresAt,
+    created_at: serverTimestamp(),
+    status: "pending"
+  });
+
+  // Save session locally
+  localStorage.setItem("streamPassword", password);
+  localStorage.setItem("expiresAt", expiresAt.getTime());
+
+  notifyAdmin(fullName, phone, password, expiresAt);
+
+  document.getElementById("registrationCard").style.display = "none";
+  document.getElementById("passwordCard").style.display = "block";
+};
+
+/* 🔓 UNLOCK STREAM */
+window.unlockStream = function () {
+  const input = document.getElementById("passwordInput").value;
+  const saved = localStorage.getItem("streamPassword");
+  const expiry = localStorage.getItem("expiresAt");
+
+  if (!saved || !expiry) {
+    alert("Session expired. Please register again.");
+    location.reload();
+    return;
+  }
+
+  if (Date.now() > Number(expiry)) {
+    alert("Password expired. Please register again.");
+    localStorage.clear();
+    location.reload();
+    return;
+  }
+
+  if (input === saved) {
+    document.getElementById("lockScreen").style.display = "none";
+    document.getElementById("streamWrap").style.display = "flex";
+  } else {
+    alert("Incorrect password");
+  }
+};
 </script>
 
 <style>
@@ -75,7 +128,6 @@ html, body {
   color: #00ffe7;
 }
 
-/* LOCK SCREEN */
 #lockScreen {
   position: fixed;
   inset: 0;
@@ -83,7 +135,6 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 9999;
 }
 
 .lock-card {
@@ -96,67 +147,24 @@ html, body {
   width: 92%;
 }
 
-.lock-card h2 {
-  color: #ff00ff;
-  text-shadow: 0 0 15px #ff00ff;
-  margin-bottom: 10px;
-}
-
-.lock-card input {
+.lock-card input, button {
   width: 100%;
   padding: 12px;
   margin-top: 14px;
   border-radius: 8px;
-  background: transparent;
-  border: 2px solid #00ffe7;
-  color: #00ffe7;
-  font-size: 16px;
-  text-align: center;
 }
 
-.lock-card button {
-  margin-top: 16px;
-  padding: 12px;
-  width: 100%;
-  border-radius: 8px;
+button {
   border: none;
   background: #00ffe7;
-  color: #000;
   font-weight: bold;
   cursor: pointer;
-  box-shadow: 0 0 20px #00ffe7;
-}
-
-.lock-card p {
-  font-size: 14px;
-  opacity: 0.85;
-  margin-top: 12px;
-}
-
-.lock-card a {
-  color: #25D366;
-  font-weight: bold;
-  text-decoration: none;
-  text-shadow: 0 0 10px #25D366;
-}
-
-.lock-card a:hover {
-  text-decoration: underline;
 }
 
 .stream-wrap {
   display: none;
-  padding: 10px;
   justify-content: center;
-}
-
-.stream-frame {
-  width: 95%;
-  max-width: 1200px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: 2px solid #00ffe7;
-  box-shadow: 0 0 20px #00ffe7, 0 0 50px #ff00ff;
+  padding: 10px;
 }
 
 iframe {
@@ -169,34 +177,26 @@ iframe {
 
 <body>
 
-<!-- LOCK SCREEN WITH REGISTRATION + PASSWORD -->
 <div id="lockScreen">
-  <!-- Step 1: Registration -->
   <div class="lock-card" id="registrationCard">
     <h2>Enter Your Details</h2>
-    <input type="text" id="fullName" placeholder="Full Name" required>
-    <input type="tel" id="phone" placeholder="Phone Number" required>
+    <input id="fullName" placeholder="Full Name">
+    <input id="phone" placeholder="Phone Number">
     <button onclick="submitViewerData()">Next</button>
-    <p>Need help? <a href="https://wa.me/254725820123" target="_blank">💬 Chat on WhatsApp</a></p>
   </div>
 
-  <!-- Step 2: Password -->
   <div class="lock-card" id="passwordCard" style="display:none;">
     <h2>Enter Stream Password</h2>
-    <input type="password" id="passwordInput" placeholder="Access Password">
+    <input id="passwordInput" placeholder="Access Password">
     <button onclick="unlockStream()">Unlock Stream</button>
-    <p>Need help? <a href="https://wa.me/254725820123" target="_blank">💬 Chat on WhatsApp</a></p>
   </div>
 </div>
 
-<!-- STREAM -->
 <div class="stream-wrap" id="streamWrap">
-  <div class="stream-frame">
-    <iframe
-      src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io"
-      allowfullscreen>
-    </iframe>
-  </div>
+  <iframe
+    src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io"
+    allowfullscreen>
+  </iframe>
 </div>
 
 </body>
