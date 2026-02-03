@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>CEO Ryan Private Stream</title>
+<title>CEO Ryan Private Stream + Admin</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script type="module">
@@ -10,8 +10,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebas
 import {
   getFirestore,
   doc,
+  collection,
   setDoc,
   getDoc,
+  getDocs,
   updateDoc,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
@@ -29,7 +31,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* 📞 NORMALIZE PHONE */
+/* 📞 PHONE NORMALIZER */
 function normalizePhone(input) {
   let p = input.replace(/\D/g, "");
   if (p.startsWith("0")) p = "254" + p.slice(1);
@@ -37,7 +39,7 @@ function normalizePhone(input) {
   return p;
 }
 
-/* 🔐 PASSWORD */
+/* 🔐 PASSWORD GENERATOR */
 function generatePassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return "SPT-" + Array.from({ length: 4 }, () =>
@@ -45,16 +47,15 @@ function generatePassword() {
   ).join("");
 }
 
-/* ⏱ EXPIRY (2H 30M) */
+/* ⏱ EXPIRY */
 function expiryTime() {
-  return new Date(Date.now() + (2.5 * 60 * 60 * 1000));
+  return new Date(Date.now() + 2.5 * 60 * 60 * 1000);
 }
 
-/* 📝 REGISTER */
+/* ================= REGISTER ================= */
 window.registerUser = async () => {
   const name = fullName.value.trim();
   const phoneClean = normalizePhone(phone.value.trim());
-
   if (!name || !phoneClean) {
     alert("Enter valid name and phone number");
     return;
@@ -62,7 +63,6 @@ window.registerUser = async () => {
 
   const ref = doc(db, "viewers", phoneClean);
   const snap = await getDoc(ref);
-
   if (snap.exists()) {
     alert("Account exists. Please login.");
     return;
@@ -77,49 +77,27 @@ window.registerUser = async () => {
     created_at: serverTimestamp()
   });
 
-  alert(
-    "Registration successful.\n\n" +
-    "Admin will send yiu steps for payment and password on whatsapp shortly."
-  );
-
+  alert("Registration successful. Admin will send password after payment.");
   fullName.value = "";
   phone.value = "";
 };
 
-/* 🔓 LOGIN */
+/* ================= LOGIN ================= */
 window.loginUser = async () => {
   const phoneClean = normalizePhone(loginPhone.value.trim());
   const pass = loginPassword.value.trim();
-
-  if (!phoneClean || !pass) {
-    alert("Enter valid phone and password");
-    return;
-  }
+  if (!phoneClean || !pass) { alert("Enter valid phone and password"); return; }
 
   const ref = doc(db, "viewers", phoneClean);
   const snap = await getDoc(ref);
-
-  if (!snap.exists()) {
-    alert("Account not found. Please register.");
-    return;
-  }
+  if (!snap.exists()) { alert("Account not found."); return; }
 
   const user = snap.data();
-
   if (Date.now() > user.expires_at.toDate().getTime()) {
-    alert("Your password is expired, kindly re-register");
-    return;
+    alert("Password expired. Re-register"); return;
   }
-
-  if (user.is_logged_in) {
-    alert("This account is already in use on another device");
-    return;
-  }
-
-  if (pass !== user.password) {
-    alert("Incorrect password");
-    return;
-  }
+  if (user.is_logged_in) { alert("Account already in use"); return; }
+  if (pass !== user.password) { alert("Incorrect password"); return; }
 
   await updateDoc(ref, { is_logged_in: true });
   localStorage.setItem("activeUser", phoneClean);
@@ -128,135 +106,123 @@ window.loginUser = async () => {
   streamWrap.style.display = "block";
 };
 
-/* 🚪 LOGOUT */
+/* ================= LOGOUT ================= */
 window.logoutUser = async () => {
   const phone = localStorage.getItem("activeUser");
   if (phone) {
-    await updateDoc(doc(db, "viewers", phone), {
-      is_logged_in: false
-    });
+    await updateDoc(doc(db, "viewers", phone), { is_logged_in: false });
     localStorage.removeItem("activeUser");
   }
   location.reload();
 };
+
+/* ================= ADMIN DASHBOARD ================= */
+const ADMIN_KEY = "supersecret"; // CHANGE THIS
+window.showAdmin = async () => {
+  const key = prompt("Enter admin key:");
+  if (key !== ADMIN_KEY) { alert("Wrong key"); return; }
+
+  document.getElementById("adminPanel").style.display = "block";
+
+  const viewersSnapshot = await getDocs(collection(db, "viewers"));
+  const tbody = document.getElementById("viewersList");
+  tbody.innerHTML = "";
+
+  viewersSnapshot.forEach(docSnap => {
+    const data = docSnap.data();
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${data.full_name}</td>
+      <td>${data.phone}</td>
+      <td>${data.password}</td>
+      <td>${data.is_logged_in ? "Yes" : "No"}</td>
+      <td>${new Date(data.expires_at.toDate()).toLocaleString()}</td>
+      <td><button onclick='forceLogout("${docSnap.id}")'>Logout</button></td>
+      <td><button onclick='extendExpiry("${docSnap.id}")'>+2H30M</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+};
+
+window.forceLogout = async (phone) => {
+  await updateDoc(doc(db, "viewers", phone), { is_logged_in: false });
+  alert("User logged out");
+  showAdmin();
+};
+
+window.extendExpiry = async (phone) => {
+  await updateDoc(doc(db, "viewers", phone), { expires_at: expiryTime() });
+  alert("Expiry extended by 2h30m");
+  showAdmin();
+};
 </script>
 
 <style>
-body {
-  margin: 0;
-  background: #000;
-  font-family: Arial, sans-serif;
-  color: #00ffe7;
-}
+body { margin:0; background:#000; font-family:Arial; color:#00ffe7; }
+#lockScreen { height:100vh; display:flex; justify-content:center; align-items:center; }
+.card { width:360px; padding:28px; border-radius:14px; background: rgba(0,0,0,0.9); border:2px solid #00ffe7; text-align:center; }
+input, button { width:100%; padding:12px; margin-top:10px; border-radius:8px; border:none; }
+button { background: linear-gradient(90deg,#00ffe7,#ff00ff); font-weight:bold; cursor:pointer; }
+.switch { margin-top:14px; color:#ff00ff; cursor:pointer; }
+.whatsapp { display:block; margin-top:14px; color:#00ffe7; text-decoration:none; }
+#streamWrap { display:none; position:relative; }
+.logout-btn { position:fixed; top:12px; right:12px; padding:10px 14px; border-radius:8px; background:#ff0055; color:#fff; font-weight:bold; border:none; cursor:pointer; z-index:9999; }
+iframe { width:100%; height:100vh; border:none; }
 
-#lockScreen {
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.card {
-  width: 360px;
-  padding: 28px;
-  border-radius: 14px;
-  background: rgba(0,0,0,0.9);
-  border: 2px solid #00ffe7;
-  text-align: center;
-}
-
-input, button {
-  width: 100%;
-  padding: 12px;
-  margin-top: 10px;
-  border-radius: 8px;
-  border: none;
-}
-
-button {
-  background: linear-gradient(90deg,#00ffe7,#ff00ff);
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.switch {
-  margin-top: 14px;
-  color: #ff00ff;
-  cursor: pointer;
-}
-
-.whatsapp {
-  display: block;
-  margin-top: 14px;
-  color: #00ffe7;
-  text-decoration: none;
-}
-
-#streamWrap {
-  display: none;
-  position: relative;
-}
-
-.logout-btn {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: #ff0055;
-  color: #fff;
-  font-weight: bold;
-  border: none;
-  cursor: pointer;
-  z-index: 9999;
-}
-
-iframe {
-  width: 100%;
-  height: 100vh;
-  border: none;
-}
+/* Admin dashboard */
+#adminPanel { display:none; padding:20px; background:rgba(0,0,0,0.95); color:#00ffe7; }
+table { width:100%; border-collapse:collapse; margin-top:20px; }
+td, th { border:1px solid #00ffe7; padding:6px; text-align:center; font-size:14px; }
+th { background:#111; }
+tr:nth-child(even) { background:#000; }
 </style>
 </head>
 
 <body>
 
 <div id="lockScreen">
-
-  <!-- REGISTER -->
   <div class="card" id="registerCard">
     <h2>Register</h2>
     <input id="fullName" placeholder="Full Name">
     <input id="phone" placeholder="WhatsApp Number">
     <button onclick="registerUser()">Register</button>
-
-    <div class="switch"
-      onclick="registerCard.style.display='none';loginCard.style.display='block'">
+    <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">
       Already have a password? Login
     </div>
+    <div class="switch" onclick="showAdmin()">Admin Login</div>
   </div>
 
-  <!-- LOGIN -->
   <div class="card" id="loginCard" style="display:none;">
     <h2>Login</h2>
     <input id="loginPhone" placeholder="Phone Number">
     <input id="loginPassword" placeholder="Password">
     <button onclick="loginUser()">Enter Stream</button>
-
-    <a class="whatsapp" href="https://wa.me/254725820123" target="_blank">
-      Contact Admin for Password
-    </a>
+    <a class="whatsapp" href="https://wa.me/254725820123" target="_blank">Contact Admin for Password</a>
   </div>
-
 </div>
 
 <div id="streamWrap">
   <button class="logout-btn" onclick="logoutUser()">LOGOUT</button>
+  <iframe src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io" allowfullscreen></iframe>
+</div>
 
-  <iframe
-    src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io"
-    allowfullscreen>
-  </iframe>
+<!-- Admin Panel -->
+<div id="adminPanel">
+  <h2>Admin Dashboard</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Phone</th>
+        <th>Password</th>
+        <th>Logged In</th>
+        <th>Expires At</th>
+        <th>Force Logout</th>
+        <th>Extend Expiry</th>
+      </tr>
+    </thead>
+    <tbody id="viewersList"></tbody>
+  </table>
 </div>
 
 </body>
