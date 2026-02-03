@@ -5,7 +5,6 @@
 <title>CEO Ryan Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- ================= FIREBASE + LOGIC ================= -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import {
@@ -17,7 +16,7 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-/* 🔥 FIREBASE CONFIG */
+/* 🔥 FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
   authDomain: "twitch-user-access.firebaseapp.com",
@@ -30,7 +29,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* 🔐 PASSWORD GENERATOR */
+/* 📞 NORMALIZE PHONE */
+function normalizePhone(input) {
+  let p = input.replace(/\D/g, "");
+  if (p.startsWith("0")) p = "254" + p.slice(1);
+  if (!p.startsWith("254")) return null;
+  return p;
+}
+
+/* 🔐 PASSWORD */
 function generatePassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return "SPT-" + Array.from({ length: 4 }, () =>
@@ -38,25 +45,22 @@ function generatePassword() {
   ).join("");
 }
 
-/* ⏱ EXPIRY: 2H 30M */
+/* ⏱ EXPIRY (2H 30M) */
 function expiryTime() {
   return new Date(Date.now() + (2.5 * 60 * 60 * 1000));
 }
 
-/* ================= REGISTER ================= */
+/* 📝 REGISTER */
 window.registerUser = async () => {
-  const nameInput = document.getElementById("fullName");
-  const phoneInput = document.getElementById("phone");
+  const name = fullName.value.trim();
+  const phoneClean = normalizePhone(phone.value.trim());
 
-  const name = nameInput.value.trim();
-  const phone = phoneInput.value.trim();
-
-  if (!name || !phone) {
-    alert("Please fill all fields");
+  if (!name || !phoneClean) {
+    alert("Enter valid name and phone number");
     return;
   }
 
-  const ref = doc(db, "viewers", phone);
+  const ref = doc(db, "viewers", phoneClean);
   const snap = await getDoc(ref);
 
   if (snap.exists()) {
@@ -64,42 +68,35 @@ window.registerUser = async () => {
     return;
   }
 
-  const password = generatePassword();
-  const expires = expiryTime();
-
   await setDoc(ref, {
     full_name: name,
-    phone: phone,
-    password: password,         // ADMIN ONLY
-    expires_at: expires,
+    phone: phoneClean,
+    password: generatePassword(), // ADMIN ONLY
+    expires_at: expiryTime(),
     is_logged_in: false,
     created_at: serverTimestamp()
   });
 
-  /* ADMIN WHATSAPP */
-  window.open(
-    `https://wa.me/254725820123?text=${encodeURIComponent(
-      `NEW STREAM USER\n\nName: ${name}\nPhone: ${phone}\nPassword: ${password}\nExpires: ${expires}`
-    )}`,
-    "_blank"
+  alert(
+    "Registration successful.\n\n" +
+    "Admin will send yiu steps for payment and password on whatsapp shortly."
   );
 
-  alert("Registration successful. Password will be sent after payment.");
-  nameInput.value = "";
-  phoneInput.value = "";
+  fullName.value = "";
+  phone.value = "";
 };
 
-/* ================= LOGIN ================= */
+/* 🔓 LOGIN */
 window.loginUser = async () => {
-  const phone = document.getElementById("loginPhone").value.trim();
-  const pass = document.getElementById("loginPassword").value.trim();
+  const phoneClean = normalizePhone(loginPhone.value.trim());
+  const pass = loginPassword.value.trim();
 
-  if (!phone || !pass) {
-    alert("Please fill all fields");
+  if (!phoneClean || !pass) {
+    alert("Enter valid phone and password");
     return;
   }
 
-  const ref = doc(db, "viewers", phone);
+  const ref = doc(db, "viewers", phoneClean);
   const snap = await getDoc(ref);
 
   if (!snap.exists()) {
@@ -114,7 +111,7 @@ window.loginUser = async () => {
     return;
   }
 
-  if (user.is_logged_in === true) {
+  if (user.is_logged_in) {
     alert("This account is already in use on another device");
     return;
   }
@@ -125,25 +122,35 @@ window.loginUser = async () => {
   }
 
   await updateDoc(ref, { is_logged_in: true });
+  localStorage.setItem("activeUser", phoneClean);
 
-  document.getElementById("lockScreen").style.display = "none";
-  document.getElementById("streamWrap").style.display = "block";
+  lockScreen.style.display = "none";
+  streamWrap.style.display = "block";
+};
+
+/* 🚪 LOGOUT */
+window.logoutUser = async () => {
+  const phone = localStorage.getItem("activeUser");
+  if (phone) {
+    await updateDoc(doc(db, "viewers", phone), {
+      is_logged_in: false
+    });
+    localStorage.removeItem("activeUser");
+  }
+  location.reload();
 };
 </script>
 
-<!-- ================= STYLES ================= -->
 <style>
-html, body {
+body {
   margin: 0;
-  height: 100%;
-  background: radial-gradient(circle at top, #050505, #000);
+  background: #000;
   font-family: Arial, sans-serif;
   color: #00ffe7;
 }
 
 #lockScreen {
-  position: fixed;
-  inset: 0;
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -151,32 +158,24 @@ html, body {
 
 .card {
   width: 360px;
-  padding: 30px;
-  border-radius: 16px;
-  background: rgba(0,0,0,0.85);
+  padding: 28px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.9);
   border: 2px solid #00ffe7;
-  box-shadow: 0 0 30px #00ffe7, 0 0 60px #ff00ff;
   text-align: center;
 }
 
-input {
+input, button {
   width: 100%;
   padding: 12px;
-  margin-bottom: 12px;
+  margin-top: 10px;
   border-radius: 8px;
   border: none;
-  font-size: 16px;
 }
 
 button {
-  width: 100%;
-  padding: 14px;
-  border-radius: 10px;
-  border: none;
-  background: linear-gradient(90deg, #00ffe7, #ff00ff);
-  color: #000;
+  background: linear-gradient(90deg,#00ffe7,#ff00ff);
   font-weight: bold;
-  font-size: 16px;
   cursor: pointer;
 }
 
@@ -189,15 +188,27 @@ button {
 .whatsapp {
   display: block;
   margin-top: 14px;
-  padding: 12px;
-  border-radius: 8px;
-  text-decoration: none;
   color: #00ffe7;
-  border: 1px solid #00ffe7;
+  text-decoration: none;
 }
 
 #streamWrap {
   display: none;
+  position: relative;
+}
+
+.logout-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #ff0055;
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  cursor: pointer;
+  z-index: 9999;
 }
 
 iframe {
@@ -233,14 +244,15 @@ iframe {
     <button onclick="loginUser()">Enter Stream</button>
 
     <a class="whatsapp" href="https://wa.me/254725820123" target="_blank">
-      Didn’t receive password? Contact Admin
+      Contact Admin for Password
     </a>
   </div>
 
 </div>
 
-<!-- STREAM -->
 <div id="streamWrap">
+  <button class="logout-btn" onclick="logoutUser()">LOGOUT</button>
+
   <iframe
     src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io"
     allowfullscreen>
