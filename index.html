@@ -1,15 +1,14 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>CEO Ryan Private Stream</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-/* 🔥 FIREBASE CONFIG (UNCHANGED) */
 const firebaseConfig = {
   apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
   authDomain: "twitch-user-access.firebaseapp.com",
@@ -22,182 +21,94 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* 🔐 PASSWORD GENERATOR */
+/* 🔐 PASSWORD GEN */
 function generatePassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let p = "SPT-";
-  for (let i = 0; i < 4; i++) {
-    p += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return p;
+  return "SPT-" + Array.from({ length: 4 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join("");
 }
 
-/* ⏱ EXPIRY (2 HOURS) */
-function getExpiryTime() {
-  const d = new Date();
-  d.setHours(d.getHours() + 2);
-  return d;
+/* ⏱ 2H 30M EXPIRY */
+function expiryTime() {
+  return new Date(Date.now() + 2.5 * 60 * 60 * 1000);
 }
 
-/* 📲 SEND TO ADMIN WHATSAPP */
-function notifyAdmin(name, phone, password, expiresAt) {
-  const admin = "254725820123"; // YOUR NUMBER
-  const msg = `
-NEW STREAM REGISTRATION
+/* 📝 REGISTER */
+window.submitViewerData = async () => {
+  const name = fullName.value.trim();
+  const phone = phoneInput.value.trim();
 
-Name: ${name}
-Phone: ${phone}
-Password: ${password}
-Expires: ${expiresAt.toLocaleString()}
+  if (!name || !phone) return alert("Fill all fields");
 
-Status: Pending payment
-`;
-  window.open(
-    `https://wa.me/${admin}?text=${encodeURIComponent(msg)}`,
-    "_blank"
-  );
-}
+  const ref = doc(db, "viewers", phone);
+  const snap = await getDoc(ref);
 
-/* 📝 REGISTRATION */
-window.submitViewerData = async function () {
-  const fullName = document.getElementById("fullName").value.trim();
-  const phone = document.getElementById("phone").value.trim();
-
-  if (!fullName || !phone) {
-    alert("Please fill all fields");
+  if (snap.exists()) {
+    alert("Account exists. Please login.");
     return;
   }
 
   const password = generatePassword();
-  const expiresAt = getExpiryTime();
+  const expires = expiryTime();
 
-  await addDoc(collection(db, "viewers"), {
-    full_name: fullName,
-    phone: phone,
-    password: password,
-    expires_at: expiresAt,
-    created_at: serverTimestamp(),
-    status: "pending"
+  await setDoc(ref, {
+    full_name: name,
+    phone,
+    password,
+    expires_at: expires,
+    is_logged_in: false,
+    created_at: serverTimestamp()
   });
 
-  // Save session locally
-  localStorage.setItem("streamPassword", password);
-  localStorage.setItem("expiresAt", expiresAt.getTime());
+  window.open(
+    `https://wa.me/254725820123?text=${encodeURIComponent(
+      `NEW STREAM USER\nName: ${name}\nPhone: ${phone}\nPassword: ${password}\nExpires: ${expires}`
+    )}`,
+    "_blank"
+  );
 
-  notifyAdmin(fullName, phone, password, expiresAt);
-
-  document.getElementById("registrationCard").style.display = "none";
-  document.getElementById("passwordCard").style.display = "block";
+  alert("Registration successful. Password will be sent after payment.");
 };
 
-/* 🔓 UNLOCK STREAM */
-window.unlockStream = function () {
-  const input = document.getElementById("passwordInput").value;
-  const saved = localStorage.getItem("streamPassword");
-  const expiry = localStorage.getItem("expiresAt");
+/* 🔓 LOGIN */
+window.unlockStream = async () => {
+  const phone = phoneLogin.value.trim();
+  const inputPassword = passwordInput.value.trim();
 
-  if (!saved || !expiry) {
-    alert("Session expired. Please register again.");
-    location.reload();
+  const ref = doc(db, "viewers", phone);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) return alert("Account not found");
+
+  const user = snap.data();
+
+  if (Date.now() > user.expires_at.toDate().getTime()) {
+    alert("Your password is expired, kindly re-register");
     return;
   }
 
-  if (Date.now() > Number(expiry)) {
-    alert("Password expired. Please register again.");
-    localStorage.clear();
-    location.reload();
+  if (user.is_logged_in) {
+    alert("Account already in use on another device");
     return;
   }
 
-  if (input === saved) {
-    document.getElementById("lockScreen").style.display = "none";
-    document.getElementById("streamWrap").style.display = "flex";
-  } else {
+  if (inputPassword !== user.password) {
     alert("Incorrect password");
+    return;
   }
+
+  await updateDoc(ref, { is_logged_in: true });
+
+  lockScreen.style.display = "none";
+  streamWrap.style.display = "flex";
 };
+
+/* 🔒 AUTO LOGOUT ON CLOSE */
+window.addEventListener("beforeunload", async () => {
+  const phone = phoneLogin.value?.trim();
+  if (phone) {
+    await updateDoc(doc(db, "viewers", phone), { is_logged_in: false });
+  }
+});
 </script>
-
-<style>
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  background: radial-gradient(circle at top, #020202, #000);
-  font-family: Arial, sans-serif;
-  color: #00ffe7;
-}
-
-#lockScreen {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.96);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.lock-card {
-  padding: 32px;
-  border-radius: 16px;
-  border: 2px solid #00ffe7;
-  box-shadow: 0 0 30px #00ffe7, 0 0 60px #ff00ff;
-  text-align: center;
-  max-width: 380px;
-  width: 92%;
-}
-
-.lock-card input, button {
-  width: 100%;
-  padding: 12px;
-  margin-top: 14px;
-  border-radius: 8px;
-}
-
-button {
-  border: none;
-  background: #00ffe7;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.stream-wrap {
-  display: none;
-  justify-content: center;
-  padding: 10px;
-}
-
-iframe {
-  width: 100%;
-  height: 650px;
-  border: none;
-}
-</style>
-</head>
-
-<body>
-
-<div id="lockScreen">
-  <div class="lock-card" id="registrationCard">
-    <h2>Enter Your Details</h2>
-    <input id="fullName" placeholder="Full Name">
-    <input id="phone" placeholder="Phone Number">
-    <button onclick="submitViewerData()">Next</button>
-  </div>
-
-  <div class="lock-card" id="passwordCard" style="display:none;">
-    <h2>Enter Stream Password</h2>
-    <input id="passwordInput" placeholder="Access Password">
-    <button onclick="unlockStream()">Unlock Stream</button>
-  </div>
-</div>
-
-<div class="stream-wrap" id="streamWrap">
-  <iframe
-    src="https://player.twitch.tv/?channel=sportpesaleaguetv&parent=audryans.github.io"
-    allowfullscreen>
-  </iframe>
-</div>
-
-</body>
-</html>
