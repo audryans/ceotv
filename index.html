@@ -23,16 +23,23 @@ input{
   background:#020a0f;
   color:#0ff;
   border:1px solid #0ff4;
+  box-shadow:0 0 10px #0ff;
 }
 button{
   background:linear-gradient(90deg,#00f5ff,#00ffa6);
   font-weight:bold;
   cursor:pointer;
   box-shadow:0 0 15px #0ff;
+  transition:0.2s;
+}
+button:hover{
+  box-shadow:0 0 25px #0ff,0 0 45px #0ff;
 }
 .whatsapp{
   background:linear-gradient(90deg,#25D366,#1ebe5d);
   color:#000;
+  font-weight:bold;
+  box-shadow:0 0 15px #0f0;
 }
 hr{border:1px solid #0ff2}
 #lockScreen,#adminPanel{
@@ -50,10 +57,11 @@ table{
   width:100%;
   border-collapse:collapse;
 }
-td{
+td,th{
   border:1px solid #0ff2;
   padding:6px;
   font-size:12px;
+  text-align:center;
 }
 .badge{
   padding:6px 10px;
@@ -63,19 +71,14 @@ td{
   font-weight:bold;
   display:inline-block;
   margin-bottom:10px;
+  box-shadow:0 0 15px #0ff;
 }
 </style>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import {
-  getFirestore, doc, setDoc, getDoc, getDocs,
-  updateDoc, collection, deleteDoc, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-import {
-  getAuth, signInWithEmailAndPassword,
-  onAuthStateChanged, signOut
-} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, collection, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
 /* FIREBASE */
 const app = initializeApp({
@@ -93,60 +96,54 @@ const normPhone = p=>{
   return p.startsWith("254")?p:null;
 };
 
-const hash = async t =>
-  [...new Uint8Array(await crypto.subtle.digest(
-    "SHA-256",new TextEncoder().encode(t)
-  ))].map(b=>b.toString(16).padStart(2,"0")).join("");
-
 const expiryAt = ()=>Date.now()+2.5*60*60*1000;
 const token = ()=>crypto.randomUUID();
 
 /* REGISTER */
 window.registerUser = async ()=>{
-  const name=fullName.value.trim();
-  const phone=normPhone(phoneInput.value.trim());
+  const name = fullName.value.trim();
+  const phone = normPhone(phoneInput.value.trim());
   if(!name||!phone) return alert("Invalid data");
 
-  const ref=doc(db,"viewers",phone);
-  const snap=await getDoc(ref);
+  const ref = doc(db,"viewers",phone);
+  const snap = await getDoc(ref);
 
   if(snap.exists() && snap.data().expires_at>Date.now())
     return alert("Account already active");
 
-  const pass="SPT-"+Math.random().toString(36).slice(2,6).toUpperCase();
+  const pass = "SPT-"+Math.random().toString(36).slice(2,6).toUpperCase();
 
   await setDoc(ref,{
-    full_name:name,
+    full_name: name,
     phone,
-    password_hash:await hash(pass),
-    expires_at:expiryAt(),
-    session_token:null,
-    created_at:serverTimestamp()
+    password: pass, // stored in plain text so admin can send it
+    expires_at: expiryAt(),
+    session_token: null,
+    created_at: serverTimestamp()
   });
 
-  alert("Registered. Contact admin for password.");
+  alert(`Registered! Contact admin on WhatsApp for password.`);
 };
 
 /* LOGIN */
 window.loginUser = async ()=>{
-  const phone=normPhone(loginPhone.value.trim());
-  const pass=loginPassword.value.trim();
+  const phone = normPhone(loginPhone.value.trim());
+  const pass = loginPassword.value.trim();
   if(!phone||!pass) return;
 
-  const ref=doc(db,"viewers",phone);
-  const snap=await getDoc(ref);
+  const ref = doc(db,"viewers",phone);
+  const snap = await getDoc(ref);
   if(!snap.exists()) return alert("User not found");
 
-  const u=snap.data();
+  const u = snap.data();
   if(Date.now()>u.expires_at){
     await deleteDoc(ref);
     return alert("Password expired. Please re-register.");
   }
-  if(await hash(pass)!==u.password_hash)
-    return alert("Wrong password");
+  if(pass!==u.password) return alert("Wrong password");
   if(u.session_token) return alert("Already logged in elsewhere");
 
-  const t=token();
+  const t = token();
   await updateDoc(ref,{session_token:t});
   localStorage.setItem("session",JSON.stringify({phone,t}));
 
@@ -156,17 +153,13 @@ window.loginUser = async ()=>{
 
 /* RESTORE SESSION */
 const restore = async ()=>{
-  const s=JSON.parse(localStorage.getItem("session")||"null");
+  const s = JSON.parse(localStorage.getItem("session")||"null");
   if(!s) return;
-
-  const ref=doc(db,"viewers",s.phone);
-  const snap=await getDoc(ref);
+  const ref = doc(db,"viewers",s.phone);
+  const snap = await getDoc(ref);
   if(!snap.exists()) return logoutUser();
-
-  const u=snap.data();
-  if(u.session_token!==s.t||Date.now()>u.expires_at)
-    return logoutUser();
-
+  const u = snap.data();
+  if(u.session_token!==s.t || Date.now()>u.expires_at) return logoutUser();
   showStream();
   monitorExpiry();
 };
@@ -176,21 +169,18 @@ restore();
 let expInt;
 function monitorExpiry(){
   clearInterval(expInt);
-  expInt=setInterval(async ()=>{
-    const s=JSON.parse(localStorage.getItem("session")||"null");
+  expInt = setInterval(async ()=>{
+    const s = JSON.parse(localStorage.getItem("session")||"null");
     if(!s) return;
-    const snap=await getDoc(doc(db,"viewers",s.phone));
-    if(!snap.exists()||Date.now()>snap.data().expires_at)
-      logoutUser();
+    const snap = await getDoc(doc(db,"viewers",s.phone));
+    if(!snap.exists() || Date.now()>snap.data().expires_at) logoutUser();
   },5000);
 }
 
 /* LOGOUT */
 window.logoutUser = async ()=>{
-  const s=JSON.parse(localStorage.getItem("session")||"null");
-  if(s){
-    await updateDoc(doc(db,"viewers",s.phone),{session_token:null});
-  }
+  const s = JSON.parse(localStorage.getItem("session")||"null");
+  if(s) await updateDoc(doc(db,"viewers",s.phone),{session_token:null});
   localStorage.clear();
   location.reload();
 };
@@ -209,27 +199,28 @@ onAuthStateChanged(auth,u=>{
   if(!u) return;
   adminPanel.style.display="block";
   loadAdmin();
-  setInterval(loadAdmin,5000); // live refresh
+  setInterval(loadAdmin,5000);
 });
 
 /* ADMIN DASH */
 async function loadAdmin(){
   viewersList.innerHTML="";
   let active=0;
-  const snaps=await getDocs(collection(db,"viewers"));
+  const snaps = await getDocs(collection(db,"viewers"));
   snaps.forEach(d=>{
-    const v=d.data();
+    const v = d.data();
     if(v.session_token) active++;
-    viewersList.innerHTML+=`
-    <tr>
-      <td>${v.full_name}</td>
-      <td>${v.phone}</td>
-      <td>${new Date(v.expires_at).toLocaleString()}</td>
-      <td>${v.session_token?"YES":"NO"}</td>
-      <td><button onclick="forceLogout('${d.id}')">Logout</button></td>
-    </tr>`;
+    viewersList.innerHTML += `
+      <tr>
+        <td>${v.full_name}</td>
+        <td>${v.phone}</td>
+        <td>${v.password}</td>
+        <td>${v.session_token?"YES":"NO"}</td>
+        <td>${new Date(v.expires_at).toLocaleString()}</td>
+        <td><button onclick="forceLogout('${d.id}')">Logout</button></td>
+      </tr>`;
   });
-  activeCount.innerText=active;
+  activeCount.innerText = active;
 }
 
 window.forceLogout = async p=>{
@@ -285,6 +276,16 @@ function showStream(){
   <span class="badge">Active Viewers: <span id="activeCount">0</span></span>
   <button onclick="adminLogout()">Logout Admin</button>
   <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Phone</th>
+        <th>Password</th>
+        <th>Logged In</th>
+        <th>Expires At</th>
+        <th>Force Logout</th>
+      </tr>
+    </thead>
     <tbody id="viewersList"></tbody>
   </table>
 </div>
