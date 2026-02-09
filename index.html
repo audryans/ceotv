@@ -116,7 +116,7 @@ window.registerUser = async ()=>{
   await setDoc(ref,{
     full_name: name,
     phone,
-    password: pass, // stored in plain text so admin can send it
+    if(pass !== u.password) return alert("Wrong password"); // stored in plain text so admin can send it
     expires_at: expiryAt(),
     session_token: null,
     created_at: serverTimestamp()
