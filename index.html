@@ -105,7 +105,6 @@ window.loginUser = async () => {
 
   const user = snap.data();
 
-  // ✅ Auto-check expiry on login
   if (Date.now() > user.expires_at.toDate().getTime()) {
     alert("Password expired");
     await updateDoc(ref, { is_logged_in: false });
@@ -136,9 +135,8 @@ window.logoutUser = async () => {
     await updateDoc(doc(db, "viewers", phone), { is_logged_in: false });
     localStorage.removeItem("activeUser");
   }
-  // Hide stream, show login/register screen
-  lockScreen.style.display = "flex";
-  streamWrap.style.display = "none";
+  document.getElementById("lockScreen").style.display = "flex";
+  document.getElementById("streamWrap").style.display = "none";
 };
 
 /* ================= SESSION RESTORE ================= */
@@ -156,14 +154,7 @@ async function restoreSession() {
 
   const user = snap.data();
 
-  if (!user.is_logged_in) {
-    localStorage.removeItem("activeUser");
-    return;
-  }
-
-  // ✅ Auto-check expiry on restore
-  if (Date.now() > user.expires_at.toDate().getTime()) {
-    alert("Session expired");
+  if (!user.is_logged_in || Date.now() > user.expires_at.toDate().getTime()) {
     await updateDoc(ref, { is_logged_in: false });
     localStorage.removeItem("activeUser");
     return;
@@ -197,9 +188,9 @@ body { margin:0; background:#000; font-family:Arial; color:#00ffe7; }
 input, button { width:100%; padding:12px; margin-top:10px; border-radius:8px; border:none; }
 button { background:linear-gradient(90deg,#00ffe7,#ff00ff); font-weight:bold; cursor:pointer; }
 .switch { margin-top:14px; color:#ff00ff; cursor:pointer; }
-#streamWrap { display:none; }
+#streamWrap { display:none; position:relative; height:100vh; }
 .logout-btn { position:fixed; top:12px; right:12px; padding:10px; background:#ff0055; color:#fff; border:none; border-radius:8px; cursor:pointer; z-index:999; }
-iframe { width:100%; height:100vh; border:none; }
+iframe { width:100%; height:100%; border:none; }
 </style>
 </head>
 
@@ -243,13 +234,12 @@ iframe { width:100%; height:100vh; border:none; }
 
 <div id="streamWrap">
   <button class="logout-btn" onclick="logoutUser()">LOGOUT</button>
-<iframe
-  src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io&autoplay=true&muted=true"
-  height="720"
-  width="100%"
-  allow="fullscreen; autoplay"
-  frameborder="0">
-</iframe>
+  <iframe
+    src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io&autoplay=true&muted=true"
+    allow="autoplay"
+    allowfullscreen
+    frameborder="0">
+  </iframe>
 </div>
 
 </body>
