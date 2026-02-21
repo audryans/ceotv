@@ -65,9 +65,13 @@ window.registerUser = async () => {
   const ref = doc(db, "viewers", phoneClean);
   const snap = await getDoc(ref);
 
-  if (snap.exists()) {
-    alert("Account already exists. Please login.");
+ if (snap.exists()) {
+  const existing = snap.data();
+  if (Date.now() < existing.expires_at.toDate().getTime()) {
+    alert("Account already active. Please login.");
     return;
+  }
+}
   }
 
   await setDoc(ref, {
