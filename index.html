@@ -38,10 +38,6 @@ function expiryTime() {
   return new Date(Date.now() + 6 * 60 * 60 * 1000);
 }
 
-function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
-}
-
 /* REGISTER */
 async function registerUser() {
   const name = document.getElementById("fullName").value.trim();
@@ -72,10 +68,6 @@ async function registerUser() {
     return;
   }
 
-  // Generate verification code
-  const code = generateCode();
-  const codeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiry
-
   await setDoc(ref, {
     full_name: name,
     phone,
@@ -83,40 +75,10 @@ async function registerUser() {
     expires_at: expiryTime(),
     is_logged_in: false,
     is_approved: false,
-    is_verified: false,
-    verification_code: code,
-    code_expires_at: codeExpires,
     created_at: serverTimestamp()
   });
 
-  // TODO: Send SMS via your SMS API
-  console.log("Verification code (for testing):", code);
-  alert("Registration successful. Enter the verification code sent via SMS.");
-
-  document.getElementById("registerCard").style.display = "none";
-  document.getElementById("verifyCard").style.display = "block";
-}
-
-/* VERIFY CODE */
-async function verifyUser() {
-  const phone = normalizePhone(document.getElementById("phone").value.trim());
-  const inputCode = document.getElementById("verifyCode").value.trim();
-
-  const ref = doc(db, "viewers", phone);
-  const snap = await getDoc(ref);
-
-  if (!snap.exists()) return alert("Account not found");
-
-  const user = snap.data();
-
-  if (user.verification_code !== inputCode) return alert("Wrong code");
-  if (Date.now() > user.code_expires_at.toDate().getTime()) return alert("Code expired");
-
-  await updateDoc(ref, { is_verified: true, verification_code: null, code_expires_at: null });
-  alert("Phone verified! You can now login.");
-
-  document.getElementById("verifyCard").style.display = "none";
-  document.getElementById("loginCard").style.display = "block";
+  alert("Registration successful. Wait for admin approval.");
 }
 
 /* LOGIN */
@@ -138,11 +100,6 @@ async function loginUser() {
   }
 
   const user = snap.data();
-
-  if (!user.is_verified) {
-    alert("Please verify your phone first.");
-    return;
-  }
 
   if (!user.is_approved) {
     alert("Your account is not activated yet.");
@@ -188,10 +145,14 @@ function showStream() {
 /* WAIT FOR PAGE LOAD */
 window.addEventListener("DOMContentLoaded", () => {
 
-  document.getElementById("registerBtn").addEventListener("click", registerUser);
-  document.getElementById("verifyBtn").addEventListener("click", verifyUser);
-  document.getElementById("loginBtn").addEventListener("click", loginUser);
-  document.getElementById("logoutBtn").addEventListener("click", logoutUser);
+  document.getElementById("registerBtn")
+    .addEventListener("click", registerUser);
+
+  document.getElementById("loginBtn")
+    .addEventListener("click", loginUser);
+
+  document.getElementById("logoutBtn")
+    .addEventListener("click", logoutUser);
 
 });
 </script>
@@ -222,12 +183,6 @@ iframe { width:100%; height:100%; border:none; }
     <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">
       Already registered? Login
     </div>
-  </div>
-
-  <div class="card" id="verifyCard" style="display:none;">
-    <h2>Verify Phone</h2>
-    <input id="verifyCode" placeholder="Enter Verification Code">
-    <button id="verifyBtn">Verify</button>
   </div>
 
   <div class="card" id="loginCard" style="display:none;">
