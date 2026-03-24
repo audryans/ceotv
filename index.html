@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>CEO Ryan Private Stream</title>
+<title>CEO KPL TV</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script type="module">
@@ -45,28 +45,14 @@ async function registerUser() {
   const pass = document.getElementById("password").value.trim();
   const confirm = document.getElementById("confirmPassword").value.trim();
 
-  if (!name || !phone || !pass || !confirm) {
-    alert("Fill all fields");
-    return;
-  }
-
-  if (pass.length < 6) {
-    alert("Password must be at least 6 characters");
-    return;
-  }
-
-  if (pass !== confirm) {
-    alert("Passwords do not match");
-    return;
-  }
+  if (!name || !phone || !pass || !confirm) return alert("Fill all fields");
+  if (pass.length < 6) return alert("Password must be at least 6 characters");
+  if (pass !== confirm) return alert("Passwords do not match");
 
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
 
-  if (snap.exists()) {
-    alert("Account already exists. Login instead.");
-    return;
-  }
+  if (snap.exists()) return alert("Account already exists.");
 
   await setDoc(ref, {
     full_name: name,
@@ -78,7 +64,7 @@ async function registerUser() {
     created_at: serverTimestamp()
   });
 
-  alert("Registration successful. Wait for admin approval.");
+  alert("Registered. Wait for admin approval.");
 }
 
 /* LOGIN */
@@ -86,40 +72,19 @@ async function loginUser() {
   const phone = normalizePhone(document.getElementById("loginPhone").value.trim());
   const pass = document.getElementById("loginPassword").value.trim();
 
-  if (!phone || !pass) {
-    alert("Enter phone and password");
-    return;
-  }
+  if (!phone || !pass) return alert("Enter phone and password");
 
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
 
-  if (!snap.exists()) {
-    alert("Account not found");
-    return;
-  }
+  if (!snap.exists()) return alert("Account not found");
 
   const user = snap.data();
 
-  if (!user.is_approved) {
-    alert("Your account is not activated yet.");
-    return;
-  }
-
-  if (Date.now() > user.expires_at.toDate().getTime()) {
-    alert("Subscription expired.");
-    return;
-  }
-
-  if (user.password !== pass) {
-    alert("Wrong password.");
-    return;
-  }
-
-  if (user.is_logged_in) {
-    alert("Account already in use.");
-    return;
-  }
+  if (!user.is_approved) return alert("Not activated yet");
+  if (Date.now() > user.expires_at.toDate().getTime()) return alert("Expired");
+  if (user.password !== pass) return alert("Wrong password");
+  if (user.is_logged_in) return alert("Already in use");
 
   await updateDoc(ref, { is_logged_in: true });
   localStorage.setItem("activeUser", phone);
@@ -136,37 +101,121 @@ async function logoutUser() {
   location.reload();
 }
 
+/* TV FUNCTIONS */
+function playTwitch(channel) {
+  openPlayer(`https://player.twitch.tv/?channel=${channel}&parent=localhost&autoplay=true&muted=true`);
+}
+
+function playYouTube(id) {
+  openPlayer(`https://www.youtube.com/embed/${id}?autoplay=1&mute=1`);
+}
+
+function openPlayer(url) {
+  document.getElementById("channelGrid").style.display = "none";
+  document.getElementById("playerWrap").style.display = "block";
+  document.getElementById("player").src = url;
+}
+
+function closePlayer() {
+  document.getElementById("player").src = "";
+  document.getElementById("playerWrap").style.display = "none";
+  document.getElementById("channelGrid").style.display = "grid";
+}
+
 /* UI */
 function showStream() {
   document.getElementById("lockScreen").style.display = "none";
-  document.getElementById("streamWrap").style.display = "block";
+  document.getElementById("streamWrap").style.display = "flex";
 }
 
-/* WAIT FOR PAGE LOAD */
+/* EVENTS */
 window.addEventListener("DOMContentLoaded", () => {
-
-  document.getElementById("registerBtn")
-    .addEventListener("click", registerUser);
-
-  document.getElementById("loginBtn")
-    .addEventListener("click", loginUser);
-
-  document.getElementById("logoutBtn")
-    .addEventListener("click", logoutUser);
-
+  document.getElementById("registerBtn").onclick = registerUser;
+  document.getElementById("loginBtn").onclick = loginUser;
+  document.getElementById("logoutBtn").onclick = logoutUser;
 });
 </script>
 
 <style>
 body { margin:0; background:#000; font-family:Arial; color:#00ffe7; }
+
 #lockScreen { height:100vh; display:flex; justify-content:center; align-items:center; }
-.card { width:360px; padding:28px; border-radius:14px; background:#000; border:2px solid #00ffe7; text-align:center; }
-input, button { width:100%; padding:12px; margin-top:10px; border-radius:8px; border:none; }
-button { background:linear-gradient(90deg,#00ffe7,#ff00ff); font-weight:bold; cursor:pointer; }
+
+.card {
+  width:360px;
+  padding:28px;
+  border-radius:14px;
+  background:#000;
+  border:2px solid #00ffe7;
+  text-align:center;
+}
+
+input, button {
+  width:100%;
+  padding:12px;
+  margin-top:10px;
+  border-radius:8px;
+  border:none;
+}
+
+button {
+  background:linear-gradient(90deg,#00ffe7,#ff00ff);
+  font-weight:bold;
+  cursor:pointer;
+}
+
 .switch { margin-top:14px; color:#ff00ff; cursor:pointer; }
-#streamWrap { display:none; height:100vh; }
-iframe { width:100%; height:100%; border:none; }
-.logout-btn { position:fixed; top:12px; right:12px; padding:10px; background:#ff0055; color:#fff; border:none; border-radius:8px; cursor:pointer; z-index:999; }
+
+#streamWrap {
+  display:none;
+  flex-direction:column;
+  height:100vh;
+}
+
+.logout-btn {
+  position:absolute;
+  top:10px;
+  right:10px;
+  padding:10px;
+  background:red;
+  color:white;
+  border:none;
+  border-radius:8px;
+}
+
+/* CHANNEL GRID */
+#channelGrid {
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px,1fr));
+  gap:12px;
+  padding:12px;
+  flex:1;
+}
+
+.channel {
+  background:#111;
+  border:2px solid #00ffe7;
+  border-radius:12px;
+  padding:20px;
+  text-align:center;
+  cursor:pointer;
+}
+
+.channel:hover {
+  background:#00ffe7;
+  color:#000;
+}
+
+#playerWrap {
+  display:none;
+  height:100%;
+}
+
+iframe {
+  width:100%;
+  height:100%;
+  border:none;
+}
 </style>
 </head>
 
@@ -177,11 +226,11 @@ iframe { width:100%; height:100%; border:none; }
     <h2>Register</h2>
     <input id="fullName" placeholder="Full Name">
     <input id="phone" placeholder="Phone Number">
-    <input id="password" type="password" placeholder="Create Password">
+    <input id="password" type="password" placeholder="Password">
     <input id="confirmPassword" type="password" placeholder="Confirm Password">
     <button id="registerBtn">Register</button>
     <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">
-      Already registered? Login
+      Login instead
     </div>
   </div>
 
@@ -189,28 +238,37 @@ iframe { width:100%; height:100%; border:none; }
     <h2>Login</h2>
     <input id="loginPhone" placeholder="Phone Number">
     <input id="loginPassword" type="password" placeholder="Password">
-    <button id="loginBtn">Enter Stream</button>
+    <button id="loginBtn">Enter TV</button>
 
-    <!-- WhatsApp Button Added Below -->
-    <a href="https://wa.me/254725820123?text=Hello%20Admin,%20I%20have%20registered%20but%20my%20account%20is%20not%20activated.%20Please%20assist." target="_blank">
-      <button style="background:#25D366;">
-        Registered but not activated? Contact Admin
-      </button>
+    <a href="https://wa.me/254725820123" target="_blank">
+      <button style="background:#25D366;">Contact Admin</button>
     </a>
 
     <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'">
-      Back to Register
+      Back
     </div>
   </div>
 </div>
 
+<!-- TV UI -->
 <div id="streamWrap">
+
   <button id="logoutBtn" class="logout-btn">LOGOUT</button>
-  <iframe
-    src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io&autoplay=true&muted=true"
-    allow="autoplay"
-    allowfullscreen>
-  </iframe>
+
+  <!-- CHANNEL GRID -->
+  <div id="channelGrid">
+    <div class="channel" onclick="playTwitch('kpltv1')">KPL TV</div>
+    <div class="channel" onclick="playTwitch('monstercat')">Music TV</div>
+    <div class="channel" onclick="playYouTube('5qap5aO4i9A')">LoFi</div>
+    <div class="channel" onclick="playYouTube('jfKfPfyJRdk')">Chill Beats</div>
+  </div>
+
+  <!-- PLAYER -->
+  <div id="playerWrap">
+    <button onclick="closePlayer()" class="logout-btn" style="left:10px; right:auto;">BACK</button>
+    <iframe id="player" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+  </div>
+
 </div>
 
 </body>
