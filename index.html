@@ -2,16 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>KPL TV</title>
+<title>CEO Ryan Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import {
-  getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-/* FIREBASE */
+/* FIREBASE CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
   authDomain: "twitch-user-access.firebaseapp.com",
@@ -33,27 +38,35 @@ function expiryTime() {
   return new Date(Date.now() + 6 * 60 * 60 * 1000);
 }
 
-function getDeviceId() {
-  let id = localStorage.getItem("deviceId");
-  if (!id) {
-    id = "dev-" + Math.random().toString(36).substring(2, 10);
-    localStorage.setItem("deviceId", id);
-  }
-  return id;
-}
-
 /* REGISTER */
 async function registerUser() {
-  const name = fullName.value.trim();
-  const phone = normalizePhone(phoneInput.value.trim());
-  const pass = password.value.trim();
-  const confirm = confirmPassword.value.trim();
+  const name = document.getElementById("fullName").value.trim();
+  const phone = normalizePhone(document.getElementById("phone").value.trim());
+  const pass = document.getElementById("password").value.trim();
+  const confirm = document.getElementById("confirmPassword").value.trim();
 
-  if (!name || !phone || !pass || !confirm) return alert("Fill all fields");
-  if (pass !== confirm) return alert("Passwords do not match");
+  if (!name || !phone || !pass || !confirm) {
+    alert("Fill all fields");
+    return;
+  }
+
+  if (pass.length < 6) {
+    alert("Password must be at least 6 characters");
+    return;
+  }
+
+  if (pass !== confirm) {
+    alert("Passwords do not match");
+    return;
+  }
 
   const ref = doc(db, "viewers", phone);
-  if ((await getDoc(ref)).exists()) return alert("Account exists");
+  const snap = await getDoc(ref);
+
+  if (snap.exists()) {
+    alert("Account already exists. Login instead.");
+    return;
+  }
 
   await setDoc(ref, {
     full_name: name,
@@ -62,38 +75,53 @@ async function registerUser() {
     expires_at: expiryTime(),
     is_logged_in: false,
     is_approved: false,
-    devices: [],
     created_at: serverTimestamp()
   });
 
-  alert("Registered. Wait for approval.");
+  alert("Registration successful. Wait for admin approval.");
 }
 
 /* LOGIN */
 async function loginUser() {
-  const phone = normalizePhone(loginPhone.value.trim());
-  const pass = loginPassword.value.trim();
-  const deviceId = getDeviceId();
+  const phone = normalizePhone(document.getElementById("loginPhone").value.trim());
+  const pass = document.getElementById("loginPassword").value.trim();
+
+  if (!phone || !pass) {
+    alert("Enter phone and password");
+    return;
+  }
 
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
-  if (!snap.exists()) return alert("Account not found");
+
+  if (!snap.exists()) {
+    alert("Account not found");
+    return;
+  }
 
   const user = snap.data();
 
-  if (!user.is_approved) return alert("Not approved");
-  if (Date.now() > user.expires_at.toDate().getTime()) return alert("Expired");
-  if (user.password !== pass) return alert("Wrong password");
-
-  let devices = user.devices || [];
-
-  if (!devices.includes(deviceId)) {
-    if (devices.length >= 2) return alert("Max 2 devices");
-    devices.push(deviceId);
+  if (!user.is_approved) {
+    alert("Your account is not activated yet.");
+    return;
   }
 
-  await updateDoc(ref, { is_logged_in: true, devices });
+  if (Date.now() > user.expires_at.toDate().getTime()) {
+    alert("Subscription expired.");
+    return;
+  }
 
+  if (user.password !== pass) {
+    alert("Wrong password.");
+    return;
+  }
+
+  if (user.is_logged_in) {
+    alert("Account already in use.");
+    return;
+  }
+
+  await updateDoc(ref, { is_logged_in: true });
   localStorage.setItem("activeUser", phone);
   showStream();
 }
@@ -103,190 +131,86 @@ async function logoutUser() {
   const phone = localStorage.getItem("activeUser");
   if (phone) {
     await updateDoc(doc(db, "viewers", phone), { is_logged_in: false });
+    localStorage.removeItem("activeUser");
   }
-  localStorage.clear();
   location.reload();
-}
-
-/* CHANGE PASSWORD */
-async function changePassword() {
-  const phone = localStorage.getItem("activeUser");
-  const newPass = newPassword.value.trim();
-
-  if (!newPass || newPass.length < 6) {
-    return alert("Min 6 characters");
-  }
-
-  await updateDoc(doc(db, "viewers", phone), { password: newPass });
-  alert("Password updated");
-  newPassword.value = "";
-}
-
-/* PLAYER */
-function playTwitch(channel) {
-  const domain = window.location.hostname || "localhost";
-  const url = `https://player.twitch.tv/?channel=${channel}&parent=${domain}&parent=localhost&autoplay=true&muted=true`;
-  openPlayer(url);
-}
-
-function playYouTube(id) {
-  openPlayer(`https://www.youtube.com/embed/${id}?autoplay=1&mute=1`);
-}
-
-function openPlayer(url) {
-  player.src = url;
-  playerWrap.style.display = "block";
-  channelGrid.style.display = "none";
-}
-
-function closePlayer() {
-  player.src = "";
-  playerWrap.style.display = "none";
-  channelGrid.style.display = "grid";
 }
 
 /* UI */
 function showStream() {
-  lockScreen.style.display = "none";
-  streamWrap.style.display = "flex";
+  document.getElementById("lockScreen").style.display = "none";
+  document.getElementById("streamWrap").style.display = "block";
 }
 
-/* EVENTS */
-window.onload = () => {
-  registerBtn.onclick = registerUser;
-  loginBtn.onclick = loginUser;
-  logoutBtn.onclick = logoutUser;
-};
+/* WAIT FOR PAGE LOAD */
+window.addEventListener("DOMContentLoaded", () => {
+
+  document.getElementById("registerBtn")
+    .addEventListener("click", registerUser);
+
+  document.getElementById("loginBtn")
+    .addEventListener("click", loginUser);
+
+  document.getElementById("logoutBtn")
+    .addEventListener("click", logoutUser);
+
+});
 </script>
 
 <style>
-body { margin:0; background:#0a0a0a; color:white; font-family:Arial; }
-
-/* AUTH */
-#lockScreen {
-  height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-}
-
-.card {
-  width:320px;
-  padding:20px;
-  border-radius:10px;
-  background:#111;
-  border:1px solid #00ffe7;
-}
-
-input, button {
-  width:100%;
-  padding:10px;
-  margin-top:10px;
-  border-radius:6px;
-  border:none;
-}
-
-button {
-  background:#00ffe7;
-  font-weight:bold;
-  cursor:pointer;
-}
-
-/* HEADER */
-.header {
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  padding:10px 15px;
-  background:#111;
-  border-bottom:1px solid #00ffe7;
-}
-
-.header h2 { margin:0; font-size:18px; }
-
-.small-btn {
-  padding:6px 12px;
-  font-size:12px;
-  background:#ff4b2b;
-  color:white;
-  border-radius:6px;
-  cursor:pointer;
-}
-
-/* STREAM */
-#streamWrap {
-  display:none;
-  flex-direction:column;
-  height:100vh;
-}
-
-/* CHANNELS */
-#channelGrid {
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
-  gap:10px;
-  padding:10px;
-}
-
-.channel {
-  background:#1a1a1a;
-  padding:20px;
-  border-radius:10px;
-  text-align:center;
-  cursor:pointer;
-}
-
-.channel:hover { background:#00ffe7; color:black; }
-
-/* PLAYER */
-#playerWrap { display:none; height:70vh; }
+body { margin:0; background:#000; font-family:Arial; color:#00ffe7; }
+#lockScreen { height:100vh; display:flex; justify-content:center; align-items:center; }
+.card { width:360px; padding:28px; border-radius:14px; background:#000; border:2px solid #00ffe7; text-align:center; }
+input, button { width:100%; padding:12px; margin-top:10px; border-radius:8px; border:none; }
+button { background:linear-gradient(90deg,#00ffe7,#ff00ff); font-weight:bold; cursor:pointer; }
+.switch { margin-top:14px; color:#ff00ff; cursor:pointer; }
+#streamWrap { display:none; height:100vh; }
 iframe { width:100%; height:100%; border:none; }
-
-/* ACCOUNT PANEL */
-#accountPanel {
-  padding:10px;
-  background:#111;
-  border-top:1px solid #00ffe7;
-  display:flex;
-  gap:10px;
-}
+.logout-btn { position:fixed; top:12px; right:12px; padding:10px; background:#ff0055; color:#fff; border:none; border-radius:8px; cursor:pointer; z-index:999; }
 </style>
 </head>
 
 <body>
 
 <div id="lockScreen">
-  <div class="card">
-    <h3>Login</h3>
-    <input id="loginPhone" placeholder="Phone">
+  <div class="card" id="registerCard">
+    <h2>Register</h2>
+    <input id="fullName" placeholder="Full Name">
+    <input id="phone" placeholder="Phone Number">
+    <input id="password" type="password" placeholder="Create Password">
+    <input id="confirmPassword" type="password" placeholder="Confirm Password">
+    <button id="registerBtn">Register</button>
+    <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">
+      Already registered? Login
+    </div>
+  </div>
+
+  <div class="card" id="loginCard" style="display:none;">
+    <h2>Login</h2>
+    <input id="loginPhone" placeholder="Phone Number">
     <input id="loginPassword" type="password" placeholder="Password">
-    <button id="loginBtn">Login</button>
+    <button id="loginBtn">Enter Stream</button>
+
+    <!-- WhatsApp Button Added Below -->
+    <a href="https://wa.me/254725820123?text=Hello%20Admin,%20I%20have%20registered%20but%20my%20account%20is%20not%20activated.%20Please%20assist." target="_blank">
+      <button style="background:#25D366;">
+        Registered but not activated? Contact Admin
+      </button>
+    </a>
+
+    <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'">
+      Back to Register
+    </div>
   </div>
 </div>
 
 <div id="streamWrap">
-
-  <div class="header">
-    <h2>KPL TV</h2>
-    <button id="logoutBtn" class="small-btn">Logout</button>
-  </div>
-
-  <div id="channelGrid">
-    <div class="channel" onclick="playTwitch('kpltv1')">KPL TV</div>
-    <div class="channel" onclick="playTwitch('monstercat')">Music</div>
-    <div class="channel" onclick="playYouTube('5qap5aO4i9A')">LoFi</div>
-  </div>
-
-  <div id="playerWrap">
-    <button onclick="closePlayer()" class="small-btn">Back</button>
-    <iframe id="player"></iframe>
-  </div>
-
-  <div id="accountPanel">
-    <input id="newPassword" placeholder="New Password">
-    <button onclick="changePassword()">Update</button>
-  </div>
-
+  <button id="logoutBtn" class="logout-btn">LOGOUT</button>
+  <iframe
+    src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io&autoplay=true&muted=true"
+    allow="autoplay"
+    allowfullscreen>
+  </iframe>
 </div>
 
 </body>
