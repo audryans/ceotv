@@ -5,9 +5,11 @@
 <title>CEO Ryan Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- Firebase + HLS -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import Hls from "https://cdn.jsdelivr.net/npm/hls.js@latest";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
@@ -34,6 +36,14 @@ const changePassBtn = document.getElementById('changePassBtn');
 
 const lockScreen = document.getElementById('lockScreen');
 const streamWrap = document.getElementById('streamWrap');
+const streamMenu = document.getElementById('streamMenu');
+const twitchContainer = document.getElementById('twitchContainer');
+const iptvContainer = document.getElementById('iptvContainer');
+const channelList = document.getElementById('channelList');
+const video = document.getElementById('video');
+
+let hls;
+let allChannels = [];
 
 /* UTILITIES */
 function normalizePhone(input) {
@@ -135,7 +145,7 @@ async function loginUser(){
     last_login_at:serverTimestamp()
   });
   localStorage.setItem("activeUser",phone);
-  showStream();
+  showStreamMenu();
 }
 
 /* CHANGE PASSWORD */
@@ -167,9 +177,80 @@ async function monitorSession(){
   },3000);
 }
 
-/* SHOW STREAM */
-function showStream(){ lockScreen.style.display='none'; streamWrap.style.display='block'; monitorSession(); }
+/* STREAM MENU */
+function showStreamMenu(){
+  lockScreen.style.display='none';
+  streamWrap.style.display='block';
+  streamMenu.style.display='block';
+  twitchContainer.style.display='none';
+  iptvContainer.style.display='none';
+  monitorSession();
+}
 
+function selectStream(type){
+  streamMenu.style.display='none';
+  if(type==='twitch'){ twitchContainer.style.display='flex'; iptvContainer.style.display='none'; }
+  else if(type==='iptv'){ iptvContainer.style.display='flex'; twitchContainer.style.display='none'; loadIPTV(); }
+}
+
+/* IPTV FUNCTIONS */
+function loadIPTV(){
+  const m3uLink="https://raw.githubusercontent.com/iptv-org/iptv/master/streams/usa.m3u";
+  fetch(m3uLink).then(r=>r.text()).then(data=>{
+    allChannels=parseM3U(data);
+    renderChannels(allChannels);
+    if(allChannels.length>0) playChannel(allChannels[0].url);
+  });
+}
+
+function parseM3U(data){
+  const lines=data.split('\n');
+  const channels=[];
+  let current={};
+  lines.forEach(line=>{
+    line=line.trim();
+    if(line.startsWith('#EXTINF:')){
+      const nameMatch=line.match(/,(.+)$/);
+      const groupMatch=line.match(/group-title="([^"]+)"/);
+      const logoMatch=line.match(/tvg-logo="([^"]+)"/);
+      current={ name:nameMatch?nameMatch[1]:"Unknown", group:groupMatch?groupMatch[1]:"Others", logo:logoMatch?logoMatch[1]:"", url:"" };
+    } else if(line && !line.startsWith('#')){
+      current.url=line;
+      channels.push(current);
+    }
+  });
+  return channels;
+}
+
+function renderChannels(channels){
+  channelList.innerHTML="";
+  const groups={};
+  channels.forEach(ch=>{ if(!groups[ch.group]) groups[ch.group]=[]; groups[ch.group].push(ch); });
+  for(let g in groups){
+    const cat=document.createElement('div');
+    cat.style.padding="8px"; cat.style.fontWeight="bold"; cat.style.color="#38bdf8"; cat.innerText=g;
+    channelList.appendChild(cat);
+    groups[g].forEach(ch=>{
+      const div=document.createElement('div');
+      div.style.padding="8px"; div.style.cursor="pointer"; div.style.borderBottom="1px solid #1e293b"; div.style.display="flex"; div.style.alignItems="center";
+      if(ch.logo){ const img=document.createElement('img'); img.src=ch.logo; img.style.width="25px"; img.style.height="25px"; img.style.objectFit="contain"; img.style.marginRight="6px"; div.appendChild(img);}
+      const text=document.createElement('span'); text.innerText=ch.name; div.appendChild(text);
+      div.onclick=()=>playChannel(ch.url);
+      channelList.appendChild(div);
+    });
+  }
+}
+
+function playChannel(url){
+  if(hls) hls.destroy();
+  if(Hls.isSupported()){
+    hls=new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(video);
+  } else { video.src=url; }
+}
+
+/* INIT */
 window.onload=()=>{
   registerBtn.onclick=registerUser;
   loginBtn.onclick=loginUser;
@@ -187,7 +268,11 @@ button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;bac
 .whatsapp-btn{background:#25D366;color:#fff;}
 .switch{margin-top:12px;cursor:pointer;color:#00ffe7;}
 #streamWrap{display:none;height:100vh;}
-iframe{width:100%;height:100%;}
+#streamMenu{display:none;text-align:center;padding:20px;}
+#twitchContainer{display:none;flex:1;height:100%;}
+#iptvContainer{display:none;flex:1;height:100%;display:flex;}
+#channelList{width:250px;overflow-y:auto;background:#111;}
+video{flex:1;width:100%;height:100%;background:black;}
 .logout-btn{position:fixed;top:15px;right:15px;padding:8px 14px;font-size:12px;border-radius:20px;background:#ff004c;color:#fff;border:none;cursor:pointer;animation:pulse 1.5s infinite;}
 .logout-btn:hover{transform:scale(0.9);}
 @keyframes pulse{0%{box-shadow:0 0 5px #ff004c;}50%{box-shadow:0 0 20px #ff004c;}100%{box-shadow:0 0 5px #ff004c;}}
@@ -223,10 +308,26 @@ iframe{width:100%;height:100%;}
 
 <div id="streamWrap">
   <button id="logoutBtn" class="logout-btn">Logout</button>
-  <iframe src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io"></iframe>
-  <div class="account-panel">
-    <input id="newPassword" placeholder="New Password">
-    <button id="changePassBtn" class="small-btn">Change Password</button>
+
+  <div id="streamMenu">
+    <h2>Select Stream</h2>
+    <button onclick="selectStream('twitch')" style="margin:10px;padding:10px 20px;">KPL TV</button>
+    <button onclick="selectStream('iptv')" style="margin:10px;padding:10px 20px;">NEWS EPL AND MUSIC</button>
+  </div>
+
+  <div id="twitchContainer">
+    <iframe src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io" style="width:100%;height:100%;border:none;"></iframe>
+  </div>
+
+  <div id="iptvContainer">
+    <div id="channelList"></div>
+    <div style="flex:1;display:flex;flex-direction:column;">
+      <video id="video" controls autoplay></video>
+      <div class="account-panel">
+        <input id="newPassword" placeholder="New Password">
+        <button id="changePassBtn" class="small-btn">Change Password</button>
+      </div>
+    </div>
   </div>
 </div>
 </body>
