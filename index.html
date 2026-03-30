@@ -14,7 +14,8 @@ import {
   setDoc,
   getDoc,
   updateDoc,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -26,6 +27,31 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+/* DOM References */
+const fullName = document.getElementById('fullName');
+const phoneInput = document.getElementById('phoneInput');
+const password = document.getElementById('password');
+const confirmPassword = document.getElementById('confirmPassword');
+const loginPhone = document.getElementById('loginPhone');
+const loginPassword = document.getElementById('loginPassword');
+const newPassword = document.getElementById('newPassword');
+
+const registerBtn = document.getElementById('registerBtn');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const changePassBtn = document.getElementById('changePassBtn');
+
+const lockScreen = document.getElementById('lockScreen');
+const streamMenu = document.getElementById('streamMenu');
+const twitchContainer = document.getElementById('twitchContainer');
+const iptvContainer = document.getElementById('iptvContainer');
+const channelList = document.getElementById('channelList');
+const video = document.getElementById('video');
+
+const registerCard = document.getElementById('registerCard');
+const loginCard = document.getElementById('loginCard');
+
+/* Utilities */
 function normalizePhone(input) {
   let p = input.replace(/\D/g, "");
   if (p.startsWith("0")) p = "254" + p.slice(1);
@@ -60,26 +86,19 @@ async function getIPLocation() {
   try {
     const res = await fetch("https://ipapi.co/json/");
     const data = await res.json();
-
     return {
       ip: data.ip || "Unknown IP",
       city: data.city || "Unknown City",
       country: data.country_name || "Unknown Country"
     };
   } catch (error) {
-    return {
-      ip: "Unavailable",
-      city: "Unknown",
-      country: "Unknown"
-    };
+    return { ip: "Unavailable", city: "Unknown", country: "Unknown" };
   }
 }
 
 function timeAgo(timestamp) {
   if (!timestamp) return "Never";
-
   const diff = Date.now() - timestamp.toDate().getTime();
-
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -104,14 +123,13 @@ async function registerUser() {
 
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
-
   if (snap.exists()) return alert("Account exists");
 
   await setDoc(ref, {
     full_name: name,
     phone,
     password: pass,
-    expires_at: expiryTime(),
+    expires_at: Timestamp.fromDate(expiryTime()),
     is_logged_in: false,
     is_approved: false,
     device_id: null,
@@ -125,9 +143,9 @@ async function registerUser() {
 async function loginUser() {
   const phone = normalizePhone(loginPhone.value.trim());
   const pass = loginPassword.value.trim();
+  if (!phone || !pass) return alert("Enter phone & password");
 
   let device = localStorage.getItem("deviceID");
-
   if (!device) {
     const uniquePart = Math.random().toString(36).substring(2, 10);
     device = getDeviceName() + "-dev_" + uniquePart;
@@ -135,35 +153,26 @@ async function loginUser() {
   }
 
   const locationInfo = await getIPLocation();
-
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
-
   if (!snap.exists()) return alert("No account");
 
   const user = snap.data();
 
   if (!user.is_approved) return alert("Not approved. Contact admin.");
-  if (Date.now() > user.expires_at.toDate().getTime()) return alert("Expired");
+  if (user.expires_at && Date.now() > user.expires_at.toDate().getTime()) return alert("Expired");
   if (user.password !== pass) return alert("Wrong password");
 
   if (user.device_id && user.device_id !== device) {
     const lastSeen = timeAgo(user.last_login_at);
-
     const acceptSwitch = confirm(
       "Last device used:\n" +
-      (user.device_name || "Unknown Device") +
-      "\n" +
+      (user.device_name || "Unknown Device") + "\n" +
       (user.last_city || "Unknown City") + ", " +
-      (user.last_country || "Unknown Country") +
-      "\n" +
-      lastSeen +
-      "\n\nDo you want to switch to this device?"
+      (user.last_country || "Unknown Country") + "\n" +
+      lastSeen + "\n\nDo you want to switch to this device?"
     );
-
-    if (!acceptSwitch) {
-      return alert("Login cancelled.");
-    }
+    if (!acceptSwitch) return alert("Login cancelled.");
   }
 
   await updateDoc(ref, {
@@ -184,61 +193,42 @@ async function loginUser() {
 async function changePassword() {
   const phone = localStorage.getItem("activeUser");
   const newPass = newPassword.value.trim();
+  if (!newPass || newPass.length < 6) return alert("Password must be at least 6 characters");
 
-  if (!newPass || newPass.length < 6) {
-    return alert("Password must be at least 6 characters");
-  }
-
-  await updateDoc(doc(db, "viewers", phone), {
-    password: newPass
-  });
-
+  await updateDoc(doc(db, "viewers", phone), { password: newPass });
   alert("Password updated successfully");
 }
 
 /* LOGOUT */
 async function logoutUser() {
   const phone = localStorage.getItem("activeUser");
-
-  if (phone) {
-    await updateDoc(doc(db, "viewers", phone), {
-      is_logged_in: false
-    });
-
-    localStorage.removeItem("activeUser");
-  }
-
+  if (phone) await updateDoc(doc(db, "viewers", phone), { is_logged_in: false });
+  localStorage.removeItem("activeUser");
   location.reload();
 }
 
-/* AUTO LOGOUT IF DEVICE SWITCHED */
+/* AUTO LOGOUT */
 async function monitorSession() {
   const phone = localStorage.getItem("activeUser");
   const device = localStorage.getItem("deviceID");
-
   if (!phone || !device) return;
 
   const ref = doc(db, "viewers", phone);
-
   setInterval(async () => {
-    const snap = await getDoc(ref);
+    try {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return logoutUser();
 
-    if (!snap.exists()) {
-      alert("Session ended.");
-      logoutUser();
-      return;
-    }
-
-    const user = snap.data();
-
-    if (user.device_id !== device) {
-      alert("Your account was opened on another device.");
-      logoutUser();
-    }
+      const user = snap.data();
+      if (user.device_id !== device) {
+        alert("Your account was opened on another device.");
+        logoutUser();
+      }
+    } catch (e) { console.error(e); }
   }, 3000);
 }
 
-/* SHOW STREAM SELECTION MENU */
+/* STREAM MENU */
 function showStream() {
   lockScreen.style.display = "none";
   streamMenu.style.display = "block";
@@ -247,9 +237,8 @@ function showStream() {
 
 function selectStream(type){
   streamMenu.style.display = "none";
-  if(type==='twitch'){
-    twitchContainer.style.display='flex';
-  } else if(type==='iptv'){
+  if(type==='twitch') twitchContainer.style.display='flex';
+  else if(type==='iptv'){
     iptvContainer.style.display='flex';
     loadIPTV();
   }
@@ -257,24 +246,20 @@ function selectStream(type){
 
 /* IPTV Logic */
 import Hls from "https://cdn.jsdelivr.net/npm/hls.js@latest";
-let hls;
-let allChannels = [];
+let hls; let allChannels = [];
 
 function loadIPTV(){
   const m3uLink = "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/usa.m3u";
-  fetch(m3uLink)
-    .then(res=>res.text())
-    .then(data=>{
-      allChannels = parseM3U(data);
-      renderChannels(allChannels);
-      if(allChannels.length>0) playChannel(allChannels[0].url);
-    });
+  fetch(m3uLink).then(res=>res.text()).then(data=>{
+    allChannels = parseM3U(data);
+    renderChannels(allChannels);
+    if(allChannels.length>0) playChannel(allChannels[0].url);
+  });
 }
 
 function parseM3U(data){
-  const lines = data.split('\n');
-  const channels = [];
-  let current = {};
+  const lines = data.split('\n'); const channels=[];
+  let current={};
   lines.forEach(line=>{
     line=line.trim();
     if(line.startsWith('#EXTINF:')){
@@ -287,53 +272,27 @@ function parseM3U(data){
         logo:logoMatch?logoMatch[1]:"",
         url:""
       };
-    } else if(line && !line.startsWith('#')){
-      current.url=line;
-      channels.push(current);
-    }
+    } else if(line && !line.startsWith('#')){ current.url=line; channels.push(current); }
   });
   return channels;
 }
 
 function renderChannels(channels){
-  channelList.innerHTML="";
-  const groups={};
-  channels.forEach(ch=>{
-    if(!groups[ch.group]) groups[ch.group]=[];
-    groups[ch.group].push(ch);
-  });
-
+  channelList.innerHTML=""; const groups={};
+  channels.forEach(ch=>{ if(!groups[ch.group]) groups[ch.group]=[]; groups[ch.group].push(ch); });
   for(let group in groups){
-    let cat=document.createElement('div');
-    cat.style.padding="8px";
-    cat.style.fontWeight="bold";
-    cat.style.color="#38bdf8";
-    cat.innerText=group;
+    let cat=document.createElement('div'); cat.style.padding="8px";
+    cat.style.fontWeight="bold"; cat.style.color="#38bdf8"; cat.innerText=group;
     channelList.appendChild(cat);
-
     groups[group].forEach(ch=>{
-      let div=document.createElement('div');
-      div.style.padding="8px";
-      div.style.cursor="pointer";
-      div.style.borderBottom="1px solid #1e293b";
-      div.style.display="flex";
-      div.style.alignItems="center";
-
-      if(ch.logo){
-        let img=document.createElement('img');
-        img.src=ch.logo;
-        img.style.width="25px";
-        img.style.height="25px";
-        img.style.objectFit="contain";
-        img.style.marginRight="6px";
-        div.appendChild(img);
-      }
-
-      let text=document.createElement('span');
-      text.innerText=ch.name;
-      div.appendChild(text);
-
-      div.onclick=()=>playChannel(ch.url);
+      let div=document.createElement('div'); div.style.padding="8px";
+      div.style.cursor="pointer"; div.style.borderBottom="1px solid #1e293b";
+      div.style.display="flex"; div.style.alignItems="center";
+      if(ch.logo){ let img=document.createElement('img'); img.src=ch.logo;
+      img.style.width="25px"; img.style.height="25px"; img.style.objectFit="contain"; img.style.marginRight="6px";
+      div.appendChild(img); }
+      let text=document.createElement('span'); text.innerText=ch.name;
+      div.appendChild(text); div.onclick=()=>playChannel(ch.url);
       channelList.appendChild(div);
     });
   }
@@ -341,13 +300,8 @@ function renderChannels(channels){
 
 function playChannel(url){
   if(hls) hls.destroy();
-  if(Hls.isSupported()){
-    hls = new Hls();
-    hls.loadSource(url);
-    hls.attachMedia(video);
-  } else {
-    video.src=url;
-  }
+  if(Hls.isSupported()){ hls=new Hls(); hls.loadSource(url); hls.attachMedia(video); }
+  else video.src=url;
 }
 
 window.onload=()=>{
@@ -394,11 +348,9 @@ button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;bac
     <input id="loginPhone" placeholder="Phone">
     <input id="loginPassword" type="password" placeholder="Password">
     <button id="loginBtn">Enter</button>
-
     <a href="https://wa.me/254725820123?text=Hello%20Admin,%20I%20have%20registered%20but%20my%20account%20is%20not%20activated.%20Please%20assist." target="_blank">
       <button class="whatsapp-btn">Contact Admin (Not Activated?)</button>
     </a>
-
     <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'">Back</div>
   </div>
 </div>
@@ -409,11 +361,11 @@ button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;bac
   <!-- Stream Selection Menu -->
   <div id="streamMenu" style="display:none; text-align:center; padding:20px;">
     <h2>Select Stream</h2>
-    <button onclick="selectStream('twitch')" style="margin:10px; padding:10px 20px;">My Twitch Stream</button>
-    <button onclick="selectStream('iptv')" style="margin:10px; padding:10px 20px;">IPTV Channels</button>
+    <button onclick="selectStream('twitch')" style="margin:10px; padding:10px 20px;">KPL TV</button>
+    <button onclick="selectStream('iptv')" style="margin:10px; padding:10px 20px;">NEWS EPL AND MUSIC CHANNELS</button>
   </div>
 
-  <!-- Twitch Stream -->
+  <!-- KPL TV -->
   <div id="twitchContainer" style="display:none; flex:1;">
     <iframe src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io" style="width:100%; height:100%; border:none;"></iframe>
   </div>
