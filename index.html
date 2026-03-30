@@ -5,11 +5,10 @@
 <title>CEO Ryan Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Firebase + HLS -->
+<!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-import Hls from "https://cdn.jsdelivr.net/npm/hls.js@latest";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBxuc3suKfedfLcBIHNkfNQ9kUlZr2y1FQ",
@@ -20,147 +19,265 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* --- ORIGINAL LOGIN/REGISTER FUNCTIONS KEPT AS IS --- */
-function normalizePhone(input){ let p=input.replace(/\D/g,""); if(p.startsWith("0"))p="254"+p.slice(1); if(!p.startsWith("254")) return null; return p; }
-function expiryTime(){ return new Date(Date.now() + 6*60*60*1000); }
-function getDeviceName(){ const ua=navigator.userAgent; let os="UnknownOS",browser="UnknownBrowser"; if(/android/i.test(ua))os="Android"; else if(/iPhone|iPad|iPod/i.test(ua))os="iOS"; else if(/Windows/i.test(ua))os="Windows"; else if(/Mac/i.test(ua))os="Mac"; if(/Edg/i.test(ua))browser="Edge"; else if(/Chrome/i.test(ua))browser="Chrome"; else if(/Firefox/i.test(ua))browser="Firefox"; else if(/Safari/i.test(ua))browser="Safari"; return os+"-"+browser; }
-async function getIPLocation(){ try{ const res=await fetch("https://ipapi.co/json/"); const data=await res.json(); return { ip: data.ip||"Unknown IP", city:data.city||"Unknown City", country:data.country_name||"Unknown Country"}; }catch(e){return {ip:"Unavailable",city:"Unknown",country:"Unknown"};} }
-function timeAgo(timestamp){ if(!timestamp)return "Never"; const diff=Date.now()-timestamp.toDate().getTime(); const minutes=Math.floor(diff/60000); const hours=Math.floor(diff/3600000); const days=Math.floor(diff/86400000); if(minutes<1)return"just now"; if(minutes<60)return minutes+" minute(s) ago"; if(hours<24)return hours+" hour(s) ago"; return days+" day(s) ago"; }
+// ------------------------
+// Helper Functions
+// ------------------------
+function normalizePhone(input){ 
+  if(!input) return null;
+  let p = input.replace(/\D/g,""); 
+  if(p.startsWith("0")) p = "254" + p.slice(1);
+  if(!p.startsWith("254")) return null; 
+  return p; 
+}
 
+function expiryTime(){ return new Date(Date.now() + 6*60*60*1000); }
+
+function getDeviceName() {
+  const ua = navigator.userAgent;
+  let os="UnknownOS", browser="UnknownBrowser";
+  if(/android/i.test(ua)) os="Android";
+  else if(/iPhone|iPad|iPod/i.test(ua)) os="iOS";
+  else if(/Windows/i.test(ua)) os="Windows";
+  else if(/Mac/i.test(ua)) os="Mac";
+  if(/Edg/i.test(ua)) browser="Edge";
+  else if(/Chrome/i.test(ua)) browser="Chrome";
+  else if(/Firefox/i.test(ua)) browser="Firefox";
+  else if(/Safari/i.test(ua)) browser="Safari";
+  return os + "-" + browser;
+}
+
+async function getIPLocation() {
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    const data = await res.json();
+    return { ip:data.ip||"Unknown IP", city:data.city||"Unknown City", country:data.country_name||"Unknown Country" };
+  } catch {
+    return { ip:"Unavailable", city:"Unknown", country:"Unknown" };
+  }
+}
+
+function timeAgo(timestamp) {
+  if (!timestamp) return "Never";
+  const diff = Date.now() - timestamp.toDate().getTime();
+  const minutes = Math.floor(diff/60000), hours=Math.floor(diff/3600000), days=Math.floor(diff/86400000);
+  if(minutes<1) return "just now";
+  if(minutes<60) return minutes+" minute(s) ago";
+  if(hours<24) return hours+" hour(s) ago";
+  return days+" day(s) ago";
+}
+
+// ------------------------
+// REGISTER
+// ------------------------
 async function registerUser(){
-  const name=document.getElementById('fullName').value.trim();
-  const phone=normalizePhone(document.getElementById('phoneInput').value.trim());
-  const pass=document.getElementById('password').value.trim();
-  const confirm=document.getElementById('confirmPassword').value.trim();
-  if(!name || !phone || !pass || !confirm) return alert("Fill all fields");
+  const name = document.getElementById('fullName').value.trim();
+  const phone = normalizePhone(document.getElementById('phoneInput').value.trim());
+  const pass = document.getElementById('password').value.trim();
+  const confirm = document.getElementById('confirmPassword').value.trim();
+
+  if(!name||!phone||!pass||!confirm) return alert("Fill all fields");
   if(pass.length<6) return alert("Password must be at least 6 characters");
   if(pass!==confirm) return alert("Passwords do not match");
-  const ref=doc(db,"viewers",phone);
-  const snap=await getDoc(ref);
+
+  const ref = doc(db,"viewers",phone);
+  const snap = await getDoc(ref);
   if(snap.exists()) return alert("Account exists");
-  await setDoc(ref,{ full_name:name, phone, password:pass, expires_at:expiryTime(), is_logged_in:false, is_approved:false, device_id:null, created_at:serverTimestamp() });
+
+  await setDoc(ref,{
+    full_name: name,
+    phone,
+    password: pass,
+    expires_at: expiryTime(),
+    is_logged_in: false,
+    is_approved: false,
+    device_id: null,
+    created_at: serverTimestamp()
+  });
+
   alert("Registered. Contact admin for activation.");
 }
 
+// ------------------------
+// LOGIN
+// ------------------------
 async function loginUser(){
-  const phone=normalizePhone(document.getElementById('loginPhone').value.trim());
-  const pass=document.getElementById('loginPassword').value.trim();
+  const phone = normalizePhone(document.getElementById('loginPhone').value.trim());
+  const pass = document.getElementById('loginPassword').value.trim();
   if(!phone||!pass) return alert("Enter phone & password");
-  let device=localStorage.getItem("deviceID");
-  if(!device){ device=getDeviceName()+"-dev_"+Math.random().toString(36).substring(2,10); localStorage.setItem("deviceID",device); }
-  const loc=await getIPLocation();
-  const ref=doc(db,"viewers",phone);
-  const snap=await getDoc(ref);
+
+  const ref = doc(db,"viewers",phone);
+  const snap = await getDoc(ref);
   if(!snap.exists()) return alert("No account");
-  const user=snap.data();
+
+  const user = snap.data();
   if(!user.is_approved) return alert("Not approved");
-  if(Date.now()>user.expires_at.toDate().getTime()) return alert("Expired");
+
+  const expiry = user.expires_at && user.expires_at.toDate ? user.expires_at.toDate() : new Date(user.expires_at);
+  if(Date.now()>expiry.getTime()) return alert("Expired");
+
   if(user.password!==pass) return alert("Wrong password");
-  if(user.device_id && user.device_id!==device){
-    const lastSeen=timeAgo(user.last_login_at);
-    if(!confirm(`Last device used:\n${user.device_name||'Unknown'}\n${user.last_city||'Unknown'},${user.last_country||'Unknown'}\n${lastSeen}\n\nSwitch to this device?`)) return alert("Login cancelled");
+
+  // Device handling
+  let device = localStorage.getItem("deviceID");
+  if(!device){
+    device = getDeviceName()+"-dev_"+Math.random().toString(36).substring(2,10);
+    localStorage.setItem("deviceID",device);
   }
-  await updateDoc(ref,{ is_logged_in:true, device_id:device, device_name:getDeviceName(), last_ip:loc.ip, last_city:loc.city, last_country:loc.country, last_login_at:serverTimestamp() });
+
+  if(user.device_id && user.device_id!==device){
+    const lastSeen = timeAgo(user.last_login_at);
+    const acceptSwitch = confirm(
+      `Last device used:\n${user.device_name||"Unknown Device"}\n${user.last_city||"Unknown City"}, ${user.last_country||"Unknown Country"}\n${lastSeen}\n\nSwitch to this device?`
+    );
+    if(!acceptSwitch) return alert("Login cancelled.");
+  }
+
+  const locationInfo = await getIPLocation();
+
+  await updateDoc(ref,{
+    is_logged_in:true,
+    device_id: device,
+    device_name: getDeviceName(),
+    last_ip: locationInfo.ip,
+    last_city: locationInfo.city,
+    last_country: locationInfo.country,
+    last_login_at: serverTimestamp()
+  });
+
   localStorage.setItem("activeUser",phone);
+
   showStreamMenu();
 }
 
+// ------------------------
+// LOGOUT
+// ------------------------
+async function logoutUser(){
+  const phone = localStorage.getItem("activeUser");
+  if(phone){
+    await updateDoc(doc(db,"viewers",phone),{is_logged_in:false});
+    localStorage.removeItem("activeUser");
+  }
+  location.reload();
+}
+
+// ------------------------
+// PASSWORD CHANGE
+// ------------------------
 async function changePassword(){
-  const phone=localStorage.getItem("activeUser");
-  const newPass=document.getElementById('newPassword').value.trim();
-  if(!newPass || newPass.length<6) return alert("Password min 6 chars");
+  const phone = localStorage.getItem("activeUser");
+  const newPass = document.getElementById('newPassword').value.trim();
+  if(!newPass||newPass.length<6) return alert("Password must be at least 6 characters");
   await updateDoc(doc(db,"viewers",phone),{password:newPass});
   alert("Password updated successfully");
 }
 
-async function logoutUser(){
-  const phone=localStorage.getItem("activeUser");
-  if(phone) await updateDoc(doc(db,"viewers",phone),{is_logged_in:false});
-  localStorage.removeItem("activeUser");
-  location.reload();
-}
-
-async function monitorSession(){
-  const phone=localStorage.getItem("activeUser");
-  const device=localStorage.getItem("deviceID");
-  if(!phone||!device) return;
-  const ref=doc(db,"viewers",phone);
-  setInterval(async()=>{
-    const snap=await getDoc(ref);
-    if(!snap.exists() || snap.data().device_id!==device){ alert("Session ended"); logoutUser(); }
-  },3000);
-}
-
-/* --- STREAM MENU (Twitch + IPTV) --- */
+// ------------------------
+// STREAM MENU
+// ------------------------
 function showStreamMenu(){
   document.getElementById('lockScreen').style.display='none';
-  document.getElementById('streamWrap').style.display='block';
-  document.getElementById('streamMenu').style.display='block';
-  document.getElementById('twitchContainer').style.display='none';
-  document.getElementById('iptvContainer').style.display='none';
-  monitorSession();
+  document.getElementById('streamWrap').style.display='flex';
 }
 
-function selectStream(type){
-  document.getElementById('streamMenu').style.display='none';
-  if(type==='twitch'){ document.getElementById('twitchContainer').style.display='flex'; document.getElementById('iptvContainer').style.display='none'; }
-  else if(type==='iptv'){ document.getElementById('iptvContainer').style.display='flex'; document.getElementById('twitchContainer').style.display='none'; loadIPTV(); }
-}
+// ------------------------
+// IPTV INIT (runs only when user selects IPTV)
+// ------------------------
+async function initIPTV(){
+  // dynamic import so login code isn't blocked
+  const HlsModule = await import("https://cdn.jsdelivr.net/npm/hls.js@latest");
+  const Hls = HlsModule.default;
 
-/* --- IPTV --- */
-let hls, allChannels=[];
-function loadIPTV(){
-  const m3uLink="https://raw.githubusercontent.com/iptv-org/iptv/master/streams/usa.m3u";
-  fetch(m3uLink).then(r=>r.text()).then(data=>{
-    allChannels=parseM3U(data);
-    renderChannels(allChannels);
-    if(allChannels.length>0) playChannel(allChannels[0].url);
-  });
-}
+  const m3uLink = "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/usa.m3u";
+  const res = await fetch(m3uLink);
+  const data = await res.text();
 
-function parseM3U(data){
-  const lines=data.split('\n'), channels=[];
+  const lines = data.split("\n");
+  let channels=[];
   let current={};
   lines.forEach(line=>{
     line=line.trim();
-    if(line.startsWith('#EXTINF:')){
+    if(line.startsWith("#EXTINF:")){
       const nameMatch=line.match(/,(.+)$/);
       const groupMatch=line.match(/group-title="([^"]+)"/);
       const logoMatch=line.match(/tvg-logo="([^"]+)"/);
-      current={ name:nameMatch?nameMatch[1]:"Unknown", group:groupMatch?groupMatch[1]:"Others", logo:logoMatch?logoMatch[1]:"", url:"" };
-    } else if(line && !line.startsWith('#')){ current.url=line; channels.push(current); }
+      current = {
+        name:nameMatch?nameMatch[1]:"Unknown",
+        group:groupMatch?groupMatch[1]:"Others",
+        logo:logoMatch?logoMatch[1]:"",
+        url:""
+      };
+    } else if(line && !line.startsWith("#")){
+      current.url=line;
+      channels.push(current);
+    }
   });
-  return channels;
-}
 
-function renderChannels(channels){
-  const channelList=document.getElementById('channelList');
-  channelList.innerHTML="";
+  const container = document.getElementById('channelList');
+  const video = document.getElementById('video');
+  container.innerHTML="";
   const groups={};
   channels.forEach(ch=>{ if(!groups[ch.group]) groups[ch.group]=[]; groups[ch.group].push(ch); });
+
   for(let g in groups){
-    const cat=document.createElement('div');
-    cat.style.padding="8px"; cat.style.fontWeight="bold"; cat.style.color="#38bdf8"; cat.innerText=g;
-    channelList.appendChild(cat);
+    const cat = document.createElement('div');
+    cat.style.padding="8px";
+    cat.style.fontWeight="bold";
+    cat.style.color="#38bdf8";
+    cat.innerText = g;
+    container.appendChild(cat);
+
     groups[g].forEach(ch=>{
-      const div=document.createElement('div');
-      div.style.padding="8px"; div.style.cursor="pointer"; div.style.borderBottom="1px solid #1e293b"; div.style.display="flex"; div.style.alignItems="center";
-      if(ch.logo){ const img=document.createElement('img'); img.src=ch.logo; img.style.width="25px"; img.style.height="25px"; img.style.objectFit="contain"; img.style.marginRight="6px"; div.appendChild(img);}
-      const text=document.createElement('span'); text.innerText=ch.name; div.appendChild(text);
-      div.onclick=()=>playChannel(ch.url);
-      channelList.appendChild(div);
+      const div = document.createElement('div');
+      div.style.padding="6px"; div.style.cursor="pointer"; div.style.borderBottom="1px solid #1e293b"; div.style.display="flex"; div.style.alignItems="center";
+      if(ch.logo){
+        const img=document.createElement('img');
+        img.src=ch.logo; img.style.width="25px"; img.style.height="25px"; img.style.objectFit="contain"; img.style.marginRight="6px";
+        div.appendChild(img);
+      }
+      const text=document.createElement('span');
+      text.innerText=ch.name;
+      div.appendChild(text);
+      div.onclick=()=>playChannel(ch.url,Hls,video);
+      container.appendChild(div);
     });
+  }
+
+  // play first channel automatically
+  if(channels.length>0) playChannel(channels[0].url,Hls,video);
+}
+
+// Play selected channel
+function playChannel(url,Hls,video){
+  if(!url) return;
+  if(window.hlsInstance) window.hlsInstance.destroy();
+  if(Hls.isSupported()){
+    const hls = new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    window.hlsInstance = hls;
+  } else video.src = url;
+}
+
+// ------------------------
+// STREAM SELECT
+// ------------------------
+function selectStream(type){
+  document.getElementById('streamMenu').style.display='none';
+  document.getElementById('twitchContainer').style.display='none';
+  document.getElementById('iptvContainer').style.display='none';
+
+  if(type==='twitch') document.getElementById('twitchContainer').style.display='flex';
+  else if(type==='iptv'){
+    document.getElementById('iptvContainer').style.display='flex';
+    initIPTV();
   }
 }
 
-function playChannel(url){
-  const video=document.getElementById('video');
-  if(hls) hls.destroy();
-  if(Hls.isSupported()){ hls=new Hls(); hls.loadSource(url); hls.attachMedia(video); } else { video.src=url; }
-}
-
-/* --- INIT --- */
-window.onload=()=>{
+// ------------------------
+// Attach button handlers
+// ------------------------
+window.onload = ()=>{
   document.getElementById('registerBtn').onclick=registerUser;
   document.getElementById('loginBtn').onclick=loginUser;
   document.getElementById('logoutBtn').onclick=logoutUser;
@@ -176,11 +293,12 @@ input{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;}
 button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;background:linear-gradient(90deg,#00ffe7,#ff00ff);cursor:pointer;font-weight:bold;}
 .whatsapp-btn{background:#25D366;color:#fff;}
 .switch{margin-top:12px;cursor:pointer;color:#00ffe7;}
-#streamWrap{display:none;height:100vh;}
-#streamMenu{display:none;text-align:center;padding:20px;}
-#twitchContainer{display:none;flex:1;height:100%;}
-#iptvContainer{display:none;flex:1;height:100%;display:flex;}
+#streamWrap{display:none;flex-direction:column;height:100vh;}
+#streamMenu{text-align:center;padding:20px;}
+#twitchContainer,#iptvContainer{display:none;flex:1;}
+#iptvContainer{display:flex;}
 #channelList{width:250px;overflow-y:auto;background:#111;}
+#channelList div:hover{background:#222;}
 video{flex:1;width:100%;height:100%;background:black;}
 .logout-btn{position:fixed;top:15px;right:15px;padding:8px 14px;font-size:12px;border-radius:20px;background:#ff004c;color:#fff;border:none;cursor:pointer;animation:pulse 1.5s infinite;}
 .logout-btn:hover{transform:scale(0.9);}
@@ -190,6 +308,7 @@ video{flex:1;width:100%;height:100%;background:black;}
 .small-btn{width:auto;padding:10px 15px;background:#00ffe7;color:#000;}
 </style>
 </head>
+
 <body>
 <div id="lockScreen">
   <div class="card" id="registerCard">
@@ -199,27 +318,27 @@ video{flex:1;width:100%;height:100%;background:black;}
     <input id="password" type="password" placeholder="Password">
     <input id="confirmPassword" type="password" placeholder="Confirm Password">
     <button id="registerBtn">Register</button>
-    <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'"> Login </div>
+    <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">Login</div>
   </div>
+
   <div class="card" id="loginCard" style="display:none;">
     <h2>Login</h2>
     <input id="loginPhone" placeholder="Phone">
     <input id="loginPassword" type="password" placeholder="Password">
     <button id="loginBtn">Enter</button>
     <a href="https://wa.me/254725820123?text=Hello%20Admin,%20I%20have%20registered%20but%20my%20account%20is%20not%20activated.%20Please%20assist." target="_blank">
-      <button class="whatsapp-btn"> Contact Admin (Not Activated?) </button>
+      <button class="whatsapp-btn">Contact Admin (Not Activated?)</button>
     </a>
-    <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'"> Back </div>
+    <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'">Back</div>
   </div>
 </div>
 
 <div id="streamWrap">
   <button id="logoutBtn" class="logout-btn">Logout</button>
-
   <div id="streamMenu">
     <h2>Select Stream</h2>
-    <button onclick="selectStream('twitch')" style="margin:10px;padding:10px 20px;">KPL TV</button>
-    <button onclick="selectStream('iptv')" style="margin:10px;padding:10px 20px;">NEWS EPL MUSIC TV</button>
+    <button onclick="selectStream('twitch')">My Twitch Stream</button>
+    <button onclick="selectStream('iptv')">IPTV Channels</button>
   </div>
 
   <div id="twitchContainer">
