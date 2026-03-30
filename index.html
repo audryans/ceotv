@@ -5,7 +5,6 @@
 <title>CEO Ryan Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
@@ -19,9 +18,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ------------------------
-// Helper Functions
-// ------------------------
+// --- Helpers ---
 function normalizePhone(input){ 
   if(!input) return null;
   let p = input.replace(/\D/g,""); 
@@ -29,9 +26,7 @@ function normalizePhone(input){
   if(!p.startsWith("254")) return null; 
   return p; 
 }
-
 function expiryTime(){ return new Date(Date.now() + 6*60*60*1000); }
-
 function getDeviceName() {
   const ua = navigator.userAgent;
   let os="UnknownOS", browser="UnknownBrowser";
@@ -45,7 +40,6 @@ function getDeviceName() {
   else if(/Safari/i.test(ua)) browser="Safari";
   return os + "-" + browser;
 }
-
 async function getIPLocation() {
   try {
     const res = await fetch("https://ipapi.co/json/");
@@ -55,7 +49,6 @@ async function getIPLocation() {
     return { ip:"Unavailable", city:"Unknown", country:"Unknown" };
   }
 }
-
 function timeAgo(timestamp) {
   if (!timestamp) return "Never";
   const diff = Date.now() - timestamp.toDate().getTime();
@@ -66,23 +59,18 @@ function timeAgo(timestamp) {
   return days+" day(s) ago";
 }
 
-// ------------------------
-// REGISTER
-// ------------------------
+// --- REGISTER ---
 async function registerUser(){
   const name = document.getElementById('fullName').value.trim();
   const phone = normalizePhone(document.getElementById('phoneInput').value.trim());
   const pass = document.getElementById('password').value.trim();
   const confirm = document.getElementById('confirmPassword').value.trim();
-
   if(!name||!phone||!pass||!confirm) return alert("Fill all fields");
   if(pass.length<6) return alert("Password must be at least 6 characters");
   if(pass!==confirm) return alert("Passwords do not match");
-
   const ref = doc(db,"viewers",phone);
   const snap = await getDoc(ref);
   if(snap.exists()) return alert("Account exists");
-
   await setDoc(ref,{
     full_name: name,
     phone,
@@ -93,37 +81,25 @@ async function registerUser(){
     device_id: null,
     created_at: serverTimestamp()
   });
-
   alert("Registered. Contact admin for activation.");
 }
 
-// ------------------------
-// LOGIN
-// ------------------------
+// --- LOGIN ---
 async function loginUser(){
   const phone = normalizePhone(document.getElementById('loginPhone').value.trim());
   const pass = document.getElementById('loginPassword').value.trim();
   if(!phone||!pass) return alert("Enter phone & password");
-
   const ref = doc(db,"viewers",phone);
   const snap = await getDoc(ref);
   if(!snap.exists()) return alert("No account");
-
   const user = snap.data();
   if(!user.is_approved) return alert("Not approved");
-
   const expiry = user.expires_at && user.expires_at.toDate ? user.expires_at.toDate() : new Date(user.expires_at);
   if(Date.now()>expiry.getTime()) return alert("Expired");
-
   if(user.password!==pass) return alert("Wrong password");
 
-  // Device handling
   let device = localStorage.getItem("deviceID");
-  if(!device){
-    device = getDeviceName()+"-dev_"+Math.random().toString(36).substring(2,10);
-    localStorage.setItem("deviceID",device);
-  }
-
+  if(!device){ device = getDeviceName()+"-dev_"+Math.random().toString(36).substring(2,10); localStorage.setItem("deviceID",device); }
   if(user.device_id && user.device_id!==device){
     const lastSeen = timeAgo(user.last_login_at);
     const acceptSwitch = confirm(
@@ -133,7 +109,6 @@ async function loginUser(){
   }
 
   const locationInfo = await getIPLocation();
-
   await updateDoc(ref,{
     is_logged_in:true,
     device_id: device,
@@ -145,25 +120,17 @@ async function loginUser(){
   });
 
   localStorage.setItem("activeUser",phone);
-
   showStreamMenu();
 }
 
-// ------------------------
-// LOGOUT
-// ------------------------
+// --- LOGOUT ---
 async function logoutUser(){
   const phone = localStorage.getItem("activeUser");
-  if(phone){
-    await updateDoc(doc(db,"viewers",phone),{is_logged_in:false});
-    localStorage.removeItem("activeUser");
-  }
+  if(phone){ await updateDoc(doc(db,"viewers",phone),{is_logged_in:false}); localStorage.removeItem("activeUser"); }
   location.reload();
 }
 
-// ------------------------
-// PASSWORD CHANGE
-// ------------------------
+// --- PASSWORD CHANGE ---
 async function changePassword(){
   const phone = localStorage.getItem("activeUser");
   const newPass = document.getElementById('newPassword').value.trim();
@@ -172,111 +139,79 @@ async function changePassword(){
   alert("Password updated successfully");
 }
 
-// ------------------------
-// STREAM MENU
-// ------------------------
+// --- STREAM MENU ---
 function showStreamMenu(){
   document.getElementById('lockScreen').style.display='none';
   document.getElementById('streamWrap').style.display='flex';
+  document.getElementById('streamMenu').style.display='block';
 }
 
-// ------------------------
-// IPTV INIT (runs only when user selects IPTV)
-// ------------------------
+// --- SELECT STREAM ---
+function selectStream(type){
+  const twitch = document.getElementById('twitchContainer');
+  const iptv = document.getElementById('iptvContainer');
+  twitch.style.display='none';
+  iptv.style.display='none';
+
+  if(type==='twitch') twitch.style.display='flex';
+  else if(type==='iptv'){ iptv.style.display='flex'; initIPTV(); }
+
+  document.getElementById('streamMenu').style.display='none';
+}
+
+// --- IPTV INIT ---
 async function initIPTV(){
-  // dynamic import so login code isn't blocked
+  if(window.ipTvLoaded) return; // prevent double loading
+  window.ipTvLoaded=true;
+
   const HlsModule = await import("https://cdn.jsdelivr.net/npm/hls.js@latest");
   const Hls = HlsModule.default;
 
   const m3uLink = "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/usa.m3u";
-  const res = await fetch(m3uLink);
-  const data = await res.text();
+  const res = await fetch(m3uLink); const data = await res.text();
+  const lines = data.split("\n"); let channels=[]; let current={};
 
-  const lines = data.split("\n");
-  let channels=[];
-  let current={};
   lines.forEach(line=>{
     line=line.trim();
     if(line.startsWith("#EXTINF:")){
       const nameMatch=line.match(/,(.+)$/);
       const groupMatch=line.match(/group-title="([^"]+)"/);
       const logoMatch=line.match(/tvg-logo="([^"]+)"/);
-      current = {
-        name:nameMatch?nameMatch[1]:"Unknown",
-        group:groupMatch?groupMatch[1]:"Others",
-        logo:logoMatch?logoMatch[1]:"",
-        url:""
-      };
-    } else if(line && !line.startsWith("#")){
-      current.url=line;
-      channels.push(current);
-    }
+      current = { name:nameMatch?nameMatch[1]:"Unknown", group:groupMatch?groupMatch[1]:"Others", logo:logoMatch?logoMatch[1]:"", url:"" };
+    } else if(line && !line.startsWith("#")){ current.url=line; channels.push(current); }
   });
 
-  const container = document.getElementById('channelList');
-  const video = document.getElementById('video');
+  const container = document.getElementById('channelList'); const video = document.getElementById('video');
   container.innerHTML="";
   const groups={};
   channels.forEach(ch=>{ if(!groups[ch.group]) groups[ch.group]=[]; groups[ch.group].push(ch); });
 
   for(let g in groups){
     const cat = document.createElement('div');
-    cat.style.padding="8px";
-    cat.style.fontWeight="bold";
-    cat.style.color="#38bdf8";
-    cat.innerText = g;
+    cat.style.padding="8px"; cat.style.fontWeight="bold"; cat.style.color="#38bdf8"; cat.innerText=g;
     container.appendChild(cat);
 
     groups[g].forEach(ch=>{
-      const div = document.createElement('div');
-      div.style.padding="6px"; div.style.cursor="pointer"; div.style.borderBottom="1px solid #1e293b"; div.style.display="flex"; div.style.alignItems="center";
-      if(ch.logo){
-        const img=document.createElement('img');
-        img.src=ch.logo; img.style.width="25px"; img.style.height="25px"; img.style.objectFit="contain"; img.style.marginRight="6px";
-        div.appendChild(img);
-      }
-      const text=document.createElement('span');
-      text.innerText=ch.name;
-      div.appendChild(text);
+      const div = document.createElement('div'); div.style.padding="6px"; div.style.cursor="pointer"; div.style.borderBottom="1px solid #1e293b"; div.style.display="flex"; div.style.alignItems="center";
+      if(ch.logo){ const img=document.createElement('img'); img.src=ch.logo; img.style.width="25px"; img.style.height="25px"; img.style.objectFit="contain"; img.style.marginRight="6px"; div.appendChild(img); }
+      const text=document.createElement('span'); text.innerText=ch.name; div.appendChild(text);
       div.onclick=()=>playChannel(ch.url,Hls,video);
       container.appendChild(div);
     });
   }
 
-  // play first channel automatically
   if(channels.length>0) playChannel(channels[0].url,Hls,video);
 }
 
-// Play selected channel
+// --- PLAY CHANNEL ---
 function playChannel(url,Hls,video){
   if(!url) return;
   if(window.hlsInstance) window.hlsInstance.destroy();
-  if(Hls.isSupported()){
-    const hls = new Hls();
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    window.hlsInstance = hls;
-  } else video.src = url;
+  if(Hls.isSupported()){ const hls=new Hls(); hls.loadSource(url); hls.attachMedia(video); window.hlsInstance=hls; }
+  else video.src=url;
 }
 
-// ------------------------
-// STREAM SELECT
-// ------------------------
-function selectStream(type){
-  document.getElementById('streamMenu').style.display='none';
-  document.getElementById('twitchContainer').style.display='none';
-  document.getElementById('iptvContainer').style.display='none';
-
-  if(type==='twitch') document.getElementById('twitchContainer').style.display='flex';
-  else if(type==='iptv'){
-    document.getElementById('iptvContainer').style.display='flex';
-    initIPTV();
-  }
-}
-
-// ------------------------
-// Attach button handlers
-// ------------------------
+// --- ATTACH BUTTONS ---
 window.onload = ()=>{
   document.getElementById('registerBtn').onclick=registerUser;
   document.getElementById('loginBtn').onclick=loginUser;
@@ -296,7 +231,7 @@ button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;bac
 #streamWrap{display:none;flex-direction:column;height:100vh;}
 #streamMenu{text-align:center;padding:20px;}
 #twitchContainer,#iptvContainer{display:none;flex:1;}
-#iptvContainer{display:flex;}
+#iptvContainer{display:flex;flex-direction:row;height:100%;overflow:hidden;}
 #channelList{width:250px;overflow-y:auto;background:#111;}
 #channelList div:hover{background:#222;}
 video{flex:1;width:100%;height:100%;background:black;}
@@ -335,10 +270,11 @@ video{flex:1;width:100%;height:100%;background:black;}
 
 <div id="streamWrap">
   <button id="logoutBtn" class="logout-btn">Logout</button>
+
   <div id="streamMenu">
     <h2>Select Stream</h2>
-    <button onclick="selectStream('twitch')">My Twitch Stream</button>
-    <button onclick="selectStream('iptv')">IPTV Channels</button>
+    <button onclick="selectStream('twitch')">KPL TV</button>
+    <button onclick="selectStream('iptv')">NEWS EPL MUSIC TV</button>
   </div>
 
   <div id="twitchContainer">
