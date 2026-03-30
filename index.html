@@ -5,6 +5,7 @@
 <title>CEO Ryan Private Stream</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- Firebase -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import {
@@ -237,132 +238,141 @@ async function monitorSession() {
   }, 3000);
 }
 
+/* SHOW STREAM SELECTION MENU */
 function showStream() {
   lockScreen.style.display = "none";
-  streamWrap.style.display = "block";
+  streamMenu.style.display = "block";
   monitorSession();
 }
 
-window.onload = () => {
-  registerBtn.onclick = registerUser;
-  loginBtn.onclick = loginUser;
-  logoutBtn.onclick = logoutUser;
-  changePassBtn.onclick = changePassword;
+function selectStream(type){
+  streamMenu.style.display = "none";
+  if(type==='twitch'){
+    twitchContainer.style.display='flex';
+  } else if(type==='iptv'){
+    iptvContainer.style.display='flex';
+    loadIPTV();
+  }
+}
+
+/* IPTV Logic */
+import Hls from "https://cdn.jsdelivr.net/npm/hls.js@latest";
+let hls;
+let allChannels = [];
+
+function loadIPTV(){
+  const m3uLink = "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/usa.m3u";
+  fetch(m3uLink)
+    .then(res=>res.text())
+    .then(data=>{
+      allChannels = parseM3U(data);
+      renderChannels(allChannels);
+      if(allChannels.length>0) playChannel(allChannels[0].url);
+    });
+}
+
+function parseM3U(data){
+  const lines = data.split('\n');
+  const channels = [];
+  let current = {};
+  lines.forEach(line=>{
+    line=line.trim();
+    if(line.startsWith('#EXTINF:')){
+      const nameMatch=line.match(/,(.+)$/);
+      const groupMatch=line.match(/group-title="([^"]+)"/);
+      const logoMatch=line.match(/tvg-logo="([^"]+)"/);
+      current = {
+        name:nameMatch?nameMatch[1]:"Unknown",
+        group:groupMatch?groupMatch[1]:"Others",
+        logo:logoMatch?logoMatch[1]:"",
+        url:""
+      };
+    } else if(line && !line.startsWith('#')){
+      current.url=line;
+      channels.push(current);
+    }
+  });
+  return channels;
+}
+
+function renderChannels(channels){
+  channelList.innerHTML="";
+  const groups={};
+  channels.forEach(ch=>{
+    if(!groups[ch.group]) groups[ch.group]=[];
+    groups[ch.group].push(ch);
+  });
+
+  for(let group in groups){
+    let cat=document.createElement('div');
+    cat.style.padding="8px";
+    cat.style.fontWeight="bold";
+    cat.style.color="#38bdf8";
+    cat.innerText=group;
+    channelList.appendChild(cat);
+
+    groups[group].forEach(ch=>{
+      let div=document.createElement('div');
+      div.style.padding="8px";
+      div.style.cursor="pointer";
+      div.style.borderBottom="1px solid #1e293b";
+      div.style.display="flex";
+      div.style.alignItems="center";
+
+      if(ch.logo){
+        let img=document.createElement('img');
+        img.src=ch.logo;
+        img.style.width="25px";
+        img.style.height="25px";
+        img.style.objectFit="contain";
+        img.style.marginRight="6px";
+        div.appendChild(img);
+      }
+
+      let text=document.createElement('span');
+      text.innerText=ch.name;
+      div.appendChild(text);
+
+      div.onclick=()=>playChannel(ch.url);
+      channelList.appendChild(div);
+    });
+  }
+}
+
+function playChannel(url){
+  if(hls) hls.destroy();
+  if(Hls.isSupported()){
+    hls = new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(video);
+  } else {
+    video.src=url;
+  }
+}
+
+window.onload=()=>{
+  registerBtn.onclick=registerUser;
+  loginBtn.onclick=loginUser;
+  logoutBtn.onclick=logoutUser;
+  changePassBtn.onclick=changePassword;
 };
 </script>
 
 <style>
-body {
-  margin:0;
-  font-family:Arial;
-  background:linear-gradient(135deg,#000,#0a0a0a);
-  color:#fff;
-}
-
-#lockScreen {
-  height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-}
-
-.card {
-  width:340px;
-  padding:25px;
-  border-radius:16px;
-  background:#111;
-  box-shadow:0 0 20px rgba(0,255,231,0.2);
-  text-align:center;
-}
-
-input {
-  width:100%;
-  padding:12px;
-  margin-top:10px;
-  border-radius:8px;
-  border:none;
-}
-
-button {
-  width:100%;
-  padding:12px;
-  margin-top:10px;
-  border-radius:8px;
-  border:none;
-  background:linear-gradient(90deg,#00ffe7,#ff00ff);
-  cursor:pointer;
-  font-weight:bold;
-}
-
-.whatsapp-btn {
-  background:#25D366;
-  color:#fff;
-}
-
-.switch {
-  margin-top:12px;
-  cursor:pointer;
-  color:#00ffe7;
-}
-
-/* STREAM */
-#streamWrap {
-  display:none;
-  height:100vh;
-}
-
-iframe {
-  width:100%;
-  height:100%;
-}
-
-/* LOGOUT */
-.logout-btn {
-  position:fixed;
-  top:15px;
-  right:15px;
-  padding:8px 14px;
-  font-size:12px;
-  border-radius:20px;
-  background:#ff004c;
-  color:#fff;
-  border:none;
-  cursor:pointer;
-  animation:pulse 1.5s infinite;
-}
-
-.logout-btn:hover {
-  transform:scale(0.9);
-}
-
-@keyframes pulse {
-  0% { box-shadow:0 0 5px #ff004c; }
-  50% { box-shadow:0 0 20px #ff004c; }
-  100% { box-shadow:0 0 5px #ff004c; }
-}
-
-/* ACCOUNT PANEL */
-.account-panel {
-  position:fixed;
-  bottom:0;
-  width:100%;
-  background:#111;
-  padding:15px;
-  display:flex;
-  justify-content:center;
-  gap:10px;
-}
-
-.account-panel input {
-  width:200px;
-}
-
-.small-btn {
-  width:auto;
-  padding:10px 15px;
-  background:#00ffe7;
-  color:#000;
-}
+body {margin:0;font-family:Arial;background:linear-gradient(135deg,#000,#0a0a0a);color:#fff;}
+#lockScreen{height:100vh;display:flex;justify-content:center;align-items:center;}
+.card{width:340px;padding:25px;border-radius:16px;background:#111;box-shadow:0 0 20px rgba(0,255,231,0.2);text-align:center;}
+input{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;}
+button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:none;background:linear-gradient(90deg,#00ffe7,#ff00ff);cursor:pointer;font-weight:bold;}
+.whatsapp-btn{background:#25D366;color:#fff;}
+.switch{margin-top:12px;cursor:pointer;color:#00ffe7;}
+#streamWrap{display:none;height:100vh;}
+.logout-btn{position:fixed;top:15px;right:15px;padding:8px 14px;font-size:12px;border-radius:20px;background:#ff004c;color:#fff;border:none;cursor:pointer;animation:pulse 1.5s infinite;}
+.logout-btn:hover{transform:scale(0.9);}
+@keyframes pulse{0%{box-shadow:0 0 5px #ff004c;}50%{box-shadow:0 0 20px #ff004c;}100%{box-shadow:0 0 5px #ff004c;}}
+.account-panel{position:fixed;bottom:0;width:100%;background:#111;padding:15px;display:flex;justify-content:center;gap:10px;}
+.account-panel input{width:200px;}
+.small-btn{width:auto;padding:10px 15px;background:#00ffe7;color:#000;}
 </style>
 </head>
 
@@ -376,9 +386,7 @@ iframe {
     <input id="password" type="password" placeholder="Password">
     <input id="confirmPassword" type="password" placeholder="Confirm Password">
     <button id="registerBtn">Register</button>
-    <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">
-      Login
-    </div>
+    <div class="switch" onclick="registerCard.style.display='none';loginCard.style.display='block'">Login</div>
   </div>
 
   <div class="card" id="loginCard" style="display:none;">
@@ -387,27 +395,39 @@ iframe {
     <input id="loginPassword" type="password" placeholder="Password">
     <button id="loginBtn">Enter</button>
 
-    <!-- CONTACT ADMIN -->
     <a href="https://wa.me/254725820123?text=Hello%20Admin,%20I%20have%20registered%20but%20my%20account%20is%20not%20activated.%20Please%20assist." target="_blank">
-      <button class="whatsapp-btn">
-        Contact Admin (Not Activated?)
-      </button>
+      <button class="whatsapp-btn">Contact Admin (Not Activated?)</button>
     </a>
 
-    <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'">
-      Back
-    </div>
+    <div class="switch" onclick="loginCard.style.display='none';registerCard.style.display='block'">Back</div>
   </div>
 </div>
 
 <div id="streamWrap">
   <button id="logoutBtn" class="logout-btn">Logout</button>
 
-  <iframe src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io"></iframe>
+  <!-- Stream Selection Menu -->
+  <div id="streamMenu" style="display:none; text-align:center; padding:20px;">
+    <h2>Select Stream</h2>
+    <button onclick="selectStream('twitch')" style="margin:10px; padding:10px 20px;">My Twitch Stream</button>
+    <button onclick="selectStream('iptv')" style="margin:10px; padding:10px 20px;">IPTV Channels</button>
+  </div>
 
-  <div class="account-panel">
-    <input id="newPassword" placeholder="New Password">
-    <button id="changePassBtn" class="small-btn">Change Password</button>
+  <!-- Twitch Stream -->
+  <div id="twitchContainer" style="display:none; flex:1;">
+    <iframe src="https://player.twitch.tv/?channel=kpltv1&parent=audryans.github.io" style="width:100%; height:100%; border:none;"></iframe>
+  </div>
+
+  <!-- IPTV Player -->
+  <div id="iptvContainer" style="display:none; flex:1; height:100%; display:flex;">
+    <div id="channelList" style="width:250px; overflow-y:auto; background:#111;"></div>
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <video id="video" controls autoplay style="width:100%; height:100%; background:black;"></video>
+      <div class="account-panel">
+        <input id="newPassword" placeholder="New Password">
+        <button id="changePassBtn" class="small-btn">Change Password</button>
+      </div>
+    </div>
   </div>
 </div>
 
