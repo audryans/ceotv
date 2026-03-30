@@ -8,7 +8,12 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import {
-  getFirestore, doc, setDoc, getDoc, updateDoc, serverTimestamp
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -31,6 +36,60 @@ function expiryTime() {
   return new Date(Date.now() + 6 * 60 * 60 * 1000);
 }
 
+function getDeviceName() {
+  const ua = navigator.userAgent;
+
+  let os = "UnknownOS";
+  let browser = "UnknownBrowser";
+
+  if (/android/i.test(ua)) os = "Android";
+  else if (/iPhone|iPad|iPod/i.test(ua)) os = "iOS";
+  else if (/Windows/i.test(ua)) os = "Windows";
+  else if (/Mac/i.test(ua)) os = "Mac";
+
+  if (/Edg/i.test(ua)) browser = "Edge";
+  else if (/Chrome/i.test(ua)) browser = "Chrome";
+  else if (/Firefox/i.test(ua)) browser = "Firefox";
+  else if (/Safari/i.test(ua)) browser = "Safari";
+
+  return os + "-" + browser;
+}
+
+async function getIPLocation() {
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    const data = await res.json();
+
+    return {
+      ip: data.ip || "Unknown IP",
+      city: data.city || "Unknown City",
+      country: data.country_name || "Unknown Country"
+    };
+  } catch (error) {
+    return {
+      ip: "Unavailable",
+      city: "Unknown",
+      country: "Unknown"
+    };
+  }
+}
+
+function timeAgo(timestamp) {
+  if (!timestamp) return "Never";
+
+  const diff = Date.now() - timestamp.toDate().getTime();
+
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return minutes + " minute(s) ago";
+  if (hours < 24) return hours + " hour(s) ago";
+
+  return days + " day(s) ago";
+}
+
 /* REGISTER */
 async function registerUser() {
   const name = fullName.value.trim();
@@ -44,6 +103,7 @@ async function registerUser() {
 
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
+
   if (snap.exists()) return alert("Account exists");
 
   await setDoc(ref, {
@@ -64,9 +124,16 @@ async function registerUser() {
 async function loginUser() {
   const phone = normalizePhone(loginPhone.value.trim());
   const pass = loginPassword.value.trim();
-  const device = localStorage.getItem("deviceID") || Math.random().toString(36);
 
-  localStorage.setItem("deviceID", device);
+  let device = localStorage.getItem("deviceID");
+
+  if (!device) {
+    const uniquePart = Math.random().toString(36).substring(2, 10);
+    device = getDeviceName() + "-dev_" + uniquePart;
+    localStorage.setItem("deviceID", device);
+  }
+
+  const locationInfo = await getIPLocation();
 
   const ref = doc(db, "viewers", phone);
   const snap = await getDoc(ref);
@@ -80,12 +147,32 @@ async function loginUser() {
   if (user.password !== pass) return alert("Wrong password");
 
   if (user.device_id && user.device_id !== device) {
-    return alert("Another device already active");
+    const lastSeen = timeAgo(user.last_login_at);
+
+    const acceptSwitch = confirm(
+      "Last device used:\n" +
+      (user.device_name || "Unknown Device") +
+      "\n" +
+      (user.last_city || "Unknown City") + ", " +
+      (user.last_country || "Unknown Country") +
+      "\n" +
+      lastSeen +
+      "\n\nDo you want to switch to this device?"
+    );
+
+    if (!acceptSwitch) {
+      return alert("Login cancelled.");
+    }
   }
 
   await updateDoc(ref, {
     is_logged_in: true,
-    device_id: user.device_id || device
+    device_id: device,
+    device_name: getDeviceName(),
+    last_ip: locationInfo.ip,
+    last_city: locationInfo.city,
+    last_country: locationInfo.country,
+    last_login_at: serverTimestamp()
   });
 
   localStorage.setItem("activeUser", phone);
@@ -111,18 +198,49 @@ async function changePassword() {
 /* LOGOUT */
 async function logoutUser() {
   const phone = localStorage.getItem("activeUser");
+
   if (phone) {
     await updateDoc(doc(db, "viewers", phone), {
       is_logged_in: false
     });
+
     localStorage.removeItem("activeUser");
   }
+
   location.reload();
+}
+
+/* AUTO LOGOUT IF DEVICE SWITCHED */
+async function monitorSession() {
+  const phone = localStorage.getItem("activeUser");
+  const device = localStorage.getItem("deviceID");
+
+  if (!phone || !device) return;
+
+  const ref = doc(db, "viewers", phone);
+
+  setInterval(async () => {
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      alert("Session ended.");
+      logoutUser();
+      return;
+    }
+
+    const user = snap.data();
+
+    if (user.device_id !== device) {
+      alert("Your account was opened on another device.");
+      logoutUser();
+    }
+  }, 3000);
 }
 
 function showStream() {
   lockScreen.style.display = "none";
   streamWrap.style.display = "block";
+  monitorSession();
 }
 
 window.onload = () => {
