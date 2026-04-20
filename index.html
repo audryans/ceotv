@@ -158,21 +158,6 @@ function selectStream(type){
 
   document.getElementById('streamMenu').style.display='none';
 }
-};function goBackToMenu(){
-  document.getElementById('twitchContainer').style.display = 'none';
-  document.getElementById('iptvContainer').style.display = 'none';
-  document.getElementById('streamMenu').style.display = 'block';
-
-  // Stop Twitch playback (reload iframe)
-  const twitchFrame = document.querySelector('#twitchContainer iframe');
-  if(twitchFrame){
-    twitchFrame.src = twitchFrame.src;
-  }
-
-  // Stop IPTV / video if needed
-  if(window.hlsInstance){
-    window.hlsInstance.destroy();
-    window.hlsInstance = null;
   }
 // --- IPTV INIT ---
 async function initIPTV(){
