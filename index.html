@@ -1,4 +1,4 @@
-help me add a back button on the pages, if i select my twitch stream i can't go back <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -158,7 +158,22 @@ function selectStream(type){
 
   document.getElementById('streamMenu').style.display='none';
 }
+};function goBackToMenu(){
+  document.getElementById('twitchContainer').style.display = 'none';
+  document.getElementById('iptvContainer').style.display = 'none';
+  document.getElementById('streamMenu').style.display = 'block';
 
+  // Stop Twitch playback (reload iframe)
+  const twitchFrame = document.querySelector('#twitchContainer iframe');
+  if(twitchFrame){
+    twitchFrame.src = twitchFrame.src;
+  }
+
+  // Stop IPTV / video if needed
+  if(window.hlsInstance){
+    window.hlsInstance.destroy();
+    window.hlsInstance = null;
+  }
 // --- IPTV INIT ---
 async function initIPTV(){
   if(window.ipTvLoaded) return;
@@ -223,22 +238,6 @@ window.onload = ()=>{
   document.getElementById('loginBtn').onclick=loginUser;
   document.getElementById('logoutBtn').onclick=logoutUser;
   document.getElementById('changePassBtn').onclick=changePassword;
-};function goBackToMenu(){
-  document.getElementById('twitchContainer').style.display = 'none';
-  document.getElementById('iptvContainer').style.display = 'none';
-  document.getElementById('streamMenu').style.display = 'block';
-
-  // Stop Twitch playback (reload iframe)
-  const twitchFrame = document.querySelector('#twitchContainer iframe');
-  if(twitchFrame){
-    twitchFrame.src = twitchFrame.src;
-  }
-
-  // Stop IPTV / video if needed
-  if(window.hlsInstance){
-    window.hlsInstance.destroy();
-    window.hlsInstance = null;
-  }
 }
 </script>
 
